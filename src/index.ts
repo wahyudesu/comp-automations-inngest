@@ -1,9 +1,17 @@
-import { Hono } from "hono";
+import { Hono } from 'hono';
+import { inngest, functions } from './inngest';
+// import { serve } from 'inngest/cloudflare';
 import { serve } from "inngest/hono";
-import { functions, inngest } from "./inngest";
 
-const app = new Hono<{ Bindings: CloudflareBindings }>();
+const app = new Hono();
 
+// Health check endpoint
+app.get('/', (c) => {
+	return c.json({ status: 'ok', message: 'Competition Automation API' });
+});
+
+// Inngest serve endpoint for Cloudflare Workers
+// app.use('/inngest', serve(inngest, functions));
 app.on(
   ["GET", "PUT", "POST"],
   "/api/inngest",
@@ -13,8 +21,5 @@ app.on(
   })
 );
 
-app.get("/message", (c) => {
-  return c.text("Hello Hono!");
-});
 
 export default app;

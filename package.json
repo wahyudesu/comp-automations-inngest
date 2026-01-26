@@ -1,15 +1,18 @@
 {
-	"name": "inngest",
-	"type": "module",
-	"scripts": {
-		"dev": "wrangler dev",
-		"deploy": "wrangler deploy --minify",
-		"cf-typegen": "wrangler types --env-interface CloudflareBindings"
-	},
-	"dependencies": {
-		"hono": "^4.11.5"
-	},
-	"devDependencies": {
-		"wrangler": "^4.60.0"
-	}
+  "name": "comp-automations-inngest",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "dev:inngest": "npm exec --yes inngest-cli@latest dev",
+    "deploy": "wrangler deploy --minify",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+
+  },
+  "dependencies": {
+    "hono": "^4.11.5",
+    "inngest": "^3.49.3"
+  },
+  "devDependencies": {
+    "wrangler": "^4.4.0"
+  }
 }
