@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "comp-automations-inngest",
   "main": "src/index.ts",
-  "compatibility_date": "2026-01-25",
+  "compatibility_date": "2026-01-20",
   "compatibility_flags": ["nodejs_compat"],
   // "vars": {
   //   "INNGEST_EVENT_KEY": "your-event-key",

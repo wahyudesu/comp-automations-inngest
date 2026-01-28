@@ -5,8 +5,21 @@ import {
 	logError,
 	ErrorCategory,
 } from "../utils/enhanced-logger.js";
+import { config } from "./lib/config.js";
+import { buildUpdateObject } from "./lib/db-utils.js";
+import type { DbUpdateResult, Env, AIExtractedData } from "./lib/types.js";
 
-export async function saveToDb(posts: any[], env: any, parentLog?: EnhancedLogger) {
+interface PostWithAi {
+	id: number;
+	title?: string | null;
+	aiAnalysis?: AIExtractedData | null;
+}
+
+export async function saveToDb(
+	posts: PostWithAi[],
+	env: Env,
+	parentLog?: EnhancedLogger,
+): Promise<DbUpdateResult | undefined> {
 	const log = parentLog ?? createLogger({ workflowStep: "5-update-db" });
 
 	if (!env.DATABASE_URL) {
@@ -17,9 +30,10 @@ export async function saveToDb(posts: any[], env: any, parentLog?: EnhancedLogge
 		return;
 	}
 
+	const dbConfig = config.db;
 	const sql = postgres(env.DATABASE_URL, {
-		ssl: "require",
-		max: 1, // limit connections for serverless
+		ssl: dbConfig.ssl,
+		max: dbConfig.max,
 	});
 
 	try {
@@ -36,7 +50,6 @@ export async function saveToDb(posts: any[], env: any, parentLog?: EnhancedLogge
 
 			const ai = post.aiAnalysis;
 
-			// Skip if no AI analysis
 			if (!ai) {
 				postLog.debug("Skipping post - no AI analysis", {
 					title: post.title?.substring(0, 50),
@@ -46,24 +59,17 @@ export async function saveToDb(posts: any[], env: any, parentLog?: EnhancedLogge
 				continue;
 			}
 
-			// Build update object with only non-null AI fields
-			const updates: any = {};
-			if (ai.title) updates.title = ai.title;
-			if (ai.description) updates.description = ai.description;
-			if (ai.organizer) updates.organizer = sql.json(ai.organizer);
-			if (ai.categories) updates.categories = sql.json(ai.categories);
-			if (ai.level) updates.level = sql.json(ai.level);
-			if (ai.startDate) updates.startDate = ai.startDate;
-			if (ai.endDate) updates.endDate = ai.endDate;
-			if (ai.format) updates.format = ai.format;
-			if (ai.participationType) updates.participationType = ai.participationType;
-			if (ai.pricing) updates.pricing = sql.json(ai.pricing);
-			if (ai.contact) updates.contact = sql.json(ai.contact);
-			if (ai.prizePool) updates.prizePool = ai.prizePool;
-			if (ai.benefits) updates.benefits = ai.benefits;
-			if (ai.location) updates.location = ai.location;
+			const updates = buildUpdateObject(ai, sql);
 
-			// Update by id
+			if (Object.keys(updates).length === 0) {
+				postLog.debug("No fields to update", {
+					title: post.title?.substring(0, 50),
+					index: i + 1,
+				});
+				skippedCount++;
+				continue;
+			}
+
 			await postLog.time(`db-update-${i}`, async () => {
 				await sql`
 					UPDATE competitions
@@ -74,7 +80,7 @@ export async function saveToDb(posts: any[], env: any, parentLog?: EnhancedLogge
 
 			updateCount++;
 			postLog.debug("Updated post with AI data", {
-				title: (ai.title || post.title)?.substring(0, 50),
+				title: (ai.title ?? post.title)?.substring(0, 50),
 				fieldsUpdated: Object.keys(updates).length,
 			});
 		}

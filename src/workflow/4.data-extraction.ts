@@ -791,123 +791,17 @@ export async function extractData(
   }
 }
 
-async function updateSingleRecord(sql: any, id: number, ai: any) {
-  // Build update object with only non-null AI fields
-  const updates: any = {};
-  if (ai.title) updates.title = ai.title;
-  if (ai.description) updates.description = ai.description;
-  if (ai.organizer) updates.organizer = sql.json(ai.organizer);
-  if (ai.categories) updates.categories = sql.json(ai.categories);
-  if (ai.level) updates.level = sql.json(ai.level);
-  if (ai.startDate) updates.startDate = ai.startDate;
-  if (ai.endDate) updates.endDate = ai.endDate;
-  if (ai.format) updates.format = ai.format;
-  if (ai.participationType) updates.participationType = ai.participationType;
-  if (ai.pricing) updates.pricing = sql.json(ai.pricing);
-  if (ai.contact) updates.contact = sql.json(ai.contact);
-  if (ai.url) updates.url = ai.url;
-  if (ai.location) updates.location = ai.location;
+async function updateSingleRecord(sql: ReturnType<typeof postgres>, id: number, ai: any) {
+  const { buildUpdateObject } = await import("./lib/db-utils.js");
+  const updates = buildUpdateObject(ai, sql);
 
-  await sql`
+  if (Object.keys(updates).length === 0) {
+    return;
+	}
+
+	await sql`
     UPDATE competitions
     SET ${sql(updates)}
     WHERE id = ${id}
   `;
-}
-
-// Test runner - only execute if this file is run directly
-if (import.meta.main) {
-  const test_poster_url =
-    "https://objectcompetition.wahyuikbal.com/1766951802939-infest_competition_2026.jpg";
-
-  let data: any = {
-    title: null,
-    organizer: null,
-    level: null,
-    startDate: null,
-    endDate: null,
-    format: null,
-    participationType: null,
-    pricing: null,
-    contact: null,
-    prize: null,
-    url: "",
-    location: undefined,
-    categories: null,
-  };
-
-  const fieldSource: FieldSource = {};
-
-  function trackSource(sourceData: any, sourceName: "zai" | "mistral" | "gemini") {
-    for (const key in sourceData) {
-      if (sourceData[key] !== null && sourceData[key] !== undefined) {
-        if (!fieldSource[key]) {
-          fieldSource[key] = sourceName;
-        }
-      }
-    }
-  }
-
-  // Step 1: Mistral OCR from poster
-  console.log("Step 1: Mistral OCR from poster");
-  let mistralSuccess = false;
-  try {
-    const parsed = await mistralOCR(test_poster_url);
-    const normalized = normalize(parsed);
-    const beforeMerge = { ...data };
-    data = merge(data, normalized);
-
-    // Track which fields were newly added by mistral
-    for (const key in normalized) {
-      if (normalized[key] !== null && normalized[key] !== undefined) {
-        if (beforeMerge[key] === null || beforeMerge[key] === undefined) {
-          fieldSource[key] = "mistral";
-        }
-      }
-    }
-
-    mistralSuccess = true;
-    console.log("Mistral OCR: Success");
-  } catch (e) {
-    console.log("Mistral OCR Error:", e);
-  }
-
-  // Step 2: Fallback to Gemini if Mistral failed
-  if (!mistralSuccess) {
-    console.log("\nStep 2: Gemini fallback from poster");
-    try {
-      const geminiResult = await geminiImageToText(test_poster_url);
-      const geminiParsed = normalize(geminiResult);
-      const beforeMerge = { ...data };
-      data = merge(data, geminiParsed);
-
-      // Track which fields were newly added by gemini
-      for (const key in geminiParsed) {
-        if (geminiParsed[key] !== null && geminiParsed[key] !== undefined) {
-          if (beforeMerge[key] === null || beforeMerge[key] === undefined) {
-            fieldSource[key] = "gemini";
-          }
-        }
-      }
-
-      console.log("Gemini: Success");
-    } catch (e) {
-      console.log("Gemini Error:", e);
-    }
-  }
-
-  console.log("\n[Sources] Field extraction summary:");
-  const sourceLabels: Record<string, string> = {
-    zai: "caption",
-    mistral: "poster (Mistral)",
-    gemini: "poster (Gemini)",
-  };
-  for (const [field, source] of Object.entries(fieldSource)) {
-    if (source) {
-      console.log(`  • ${field}: ← ${sourceLabels[source]}`);
-    }
-  }
-
-  console.log("\nFinal Result:");
-  console.log(JSON.stringify(CompetitionSchema.safeParse(data), null, 2));
 }

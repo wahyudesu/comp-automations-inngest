@@ -5,7 +5,7 @@ import { uploadToR2 } from "../workflow/2.upload-to-r2.js";
 import { insertToDb } from "../workflow/3.insertdb.js";
 import { extractData } from "../workflow/4.data-extraction.js";
 import { saveToDb } from "../workflow/5.update-db.js";
-import { sendAllToWhatsApp, sendRandomToWhatsApp } from "../workflow/6.sending-wa.js";
+import { sendAllToWhatsApp } from "../workflow/6.sending-wa.js";
 
 /**
  * Inngest client configuration
@@ -201,29 +201,6 @@ export const sendWhatsAppFn = inngest.createFunction(
 );
 
 // ============================================================================
-// Step 6 (Alternate): Send to WhatsApp (Random)
-// ============================================================================
-export const sendWhatsAppRandomFn = inngest.createFunction(
-	{
-		id: "send-whatsapp-random",
-		name: "Send Random to WhatsApp",
-	},
-	{ event: "whatsapp/send-random.start" },
-	async ({ event, step }) => {
-		const { env, limit } = event.data;
-
-		const result = await step.run("send-whatsapp-random", async () => {
-			return await sendRandomToWhatsApp(env, limit || 5);
-		});
-
-		return {
-			sent: result.sent,
-			skipped: result.skipped,
-		};
-	}
-);
-
-// ============================================================================
 // Main Workflow: Complete Competition Automation (Web Source)
 // ============================================================================
 export const competitionWorkflowWeb = inngest.createFunction(
@@ -269,7 +246,9 @@ export const competitionWorkflowWeb = inngest.createFunction(
 		});
 
 		// Step 5: Update database with AI data
-		// (Already done in extraction step)
+		const updateResult = await step.run("update-db", async () => {
+			return await saveToDb(extractResult.posts || [], env);
+		});
 
 		// Step 6: Send to WhatsApp
 		const whatsappResult = await step.run("send-whatsapp", async () => {
@@ -330,6 +309,11 @@ export const competitionWorkflowIG = inngest.createFunction(
 		// Step 4: AI data extraction
 		const extractResult = await step.run("ai-extraction", async () => {
 			return await extractData(insertCount, [], env);
+		});
+
+		// Step 5: Update database with AI data
+		const updateResult = await step.run("update-db", async () => {
+			return await saveToDb(extractResult.posts || [], env);
 		});
 
 		// Step 6: Send to WhatsApp
@@ -393,29 +377,6 @@ export const scheduledIGWorkflow = inngest.createFunction(
 	}
 );
 
-// ============================================================================
-// Scheduled: Send Random WhatsApp Posts
-// ============================================================================
-export const scheduledWhatsApp = inngest.createFunction(
-	{
-		id: "scheduled-whatsapp",
-		name: "Scheduled WhatsApp Sender",
-	},
-	{ cron: "0 */4 * * *" }, // Run every 4 hours
-	async ({ step }) => {
-		// This would need env passed
-		const result = await step.run("send-random", async () => {
-			// Placeholder - env needs to be passed properly
-			return { sent: 0, skipped: 0 };
-		});
-
-		return {
-			success: true,
-			sent: result.sent,
-		};
-	}
-);
-
 /**
  * Inngest functions array
  * Export all functions for the Inngest handler
@@ -428,10 +389,8 @@ export const functions = [
 	extractDataFn,
 	updateDbFn,
 	sendWhatsAppFn,
-	sendWhatsAppRandomFn,
 	competitionWorkflowWeb,
 	competitionWorkflowIG,
 	scheduledWebWorkflow,
 	scheduledIGWorkflow,
-	scheduledWhatsApp,
 ];

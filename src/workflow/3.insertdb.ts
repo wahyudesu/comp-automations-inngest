@@ -5,8 +5,21 @@ import {
 	logError,
 	ErrorCategory,
 } from "../utils/enhanced-logger.js";
+import { config } from "./lib/config.js";
+import type { DbInsertResult, Env, SkippedCounts } from "./lib/types.js";
 
-export async function insertToDb(posts: any[], env: any, parentLog?: EnhancedLogger) {
+interface PostData {
+	title?: string | null;
+	description?: string | null;
+	image?: string | null;
+	link?: string | null;
+}
+
+export async function insertToDb(
+	posts: PostData[],
+	env: Env,
+	parentLog?: EnhancedLogger,
+): Promise<DbInsertResult | { success: false; error: string }> {
 	const log = parentLog ?? createLogger({ workflowStep: "3-insert-db" });
 
 	if (!env.DATABASE_URL) {
@@ -19,13 +32,13 @@ export async function insertToDb(posts: any[], env: any, parentLog?: EnhancedLog
 
 	log.info("Starting database insert with filtering", { postCount: posts.length });
 
+	const dbConfig = config.db;
 	const sql = postgres(env.DATABASE_URL, {
-		ssl: "require",
-		max: 1, // limit connections for serverless
+		ssl: dbConfig.ssl,
+		max: dbConfig.max,
 	});
 
 	try {
-		// 1. Get existing urlsource and description from DB
 		const existingData = await sql`
 			SELECT urlsource, description
 			FROM competitions
@@ -34,7 +47,7 @@ export async function insertToDb(posts: any[], env: any, parentLog?: EnhancedLog
 
 		const existingUrls = new Set(existingData.map((r) => r.urlsource).filter(Boolean));
 		const existingDescriptions = new Set(
-			existingData.map((r) => r.description).filter(Boolean).map((d) => d.trim())
+			existingData.map((r) => r.description).filter(Boolean).map((d) => d.trim()),
 		);
 
 		log.debug("Existing data in DB", {
@@ -42,33 +55,31 @@ export async function insertToDb(posts: any[], env: any, parentLog?: EnhancedLog
 			existingDescriptions: existingDescriptions.size,
 		});
 
-		// 2. Filter and dedupe posts
-		const filteredPosts: any[] = [];
+		const filteredPosts: PostData[] = [];
 		const seenDescriptions = new Set<string>();
 
-		let skippedUrl = 0;
-		let skippedDescription = 0;
-		let skippedDuplication = 0;
+		const skipped: SkippedCounts = {
+			skippedUrl: 0,
+			skippedDescription: 0,
+			skippedDuplication: 0,
+		};
 
 		for (const post of posts) {
-			const urlsource = post.link || "";
-			const description = (post.description || "").trim();
+			const urlsource = post.link ?? "";
+			const description = (post.description ?? "").trim();
 
-			// Skip if URL already exists in DB
 			if (urlsource && existingUrls.has(urlsource)) {
-				skippedUrl++;
+				skipped.skippedUrl++;
 				continue;
 			}
 
-			// Skip if description already exists in DB
 			if (description && existingDescriptions.has(description)) {
-				skippedDescription++;
+				skipped.skippedDescription++;
 				continue;
 			}
 
-			// Skip duplicate description in batch
 			if (description && seenDescriptions.has(description)) {
-				skippedDuplication++;
+				skipped.skippedDuplication++;
 				continue;
 			}
 
@@ -81,17 +92,19 @@ export async function insertToDb(posts: any[], env: any, parentLog?: EnhancedLog
 		log.info("Filtering completed", {
 			original: posts.length,
 			filtered: filteredPosts.length,
-			skippedUrl,
-			skippedDescription,
-			skippedDuplication,
+			skipped,
 		});
 
 		if (filteredPosts.length === 0) {
 			log.info("No new posts to insert");
-			return { success: true, count: 0, newRecordIds: [], skipped: { skippedUrl, skippedDescription, skippedDuplication } };
+			return {
+				success: true,
+				count: 0,
+				newRecordIds: [],
+				skipped,
+			};
 		}
 
-		// 3. Insert filtered posts
 		log.startTimer("db-insert-total");
 
 		const newRecordIds: number[] = [];
@@ -102,10 +115,10 @@ export async function insertToDb(posts: any[], env: any, parentLog?: EnhancedLog
 				workflowStep: `3-insert-post-${i}`,
 			});
 
-			const title = post.title || "";
-			const description = post.description || "";
-			const poster = post.image || "";
-			const urlsource = post.link || "";
+			const title = post.title ?? "";
+			const description = post.description ?? "";
+			const poster = post.image ?? "";
+			const urlsource = post.link ?? "";
 
 			const result = await postLog.time(`db-insert-${i}`, async () => {
 				return await sql`
@@ -146,7 +159,12 @@ export async function insertToDb(posts: any[], env: any, parentLog?: EnhancedLog
 			avgDuration: Math.round(totalTime / filteredPosts.length),
 		});
 
-		return { success: true, count: filteredPosts.length, newRecordIds, skipped: { skippedUrl, skippedDescription, skippedDuplication } };
+		return {
+			success: true,
+			count: filteredPosts.length,
+			newRecordIds,
+			skipped,
+		};
 	} catch (error) {
 		logError(log, error as Error, {
 			operation: "db-insert",

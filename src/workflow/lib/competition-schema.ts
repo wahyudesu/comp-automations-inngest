@@ -64,7 +64,7 @@ export const CompetitionSchema = z.object({
     .nullish()
     .describe("Registration fee in rupiah, 0 means free, Return null if not found"),
   contact: z
-    .array(z.record(z.string()))
+    .array(z.record(z.string(), z.string()))
     .nullish()
     .describe("Contact list: array of { name: phone }. Return null if not found"),
 
