@@ -1,7 +1,11 @@
 import { Hono } from "hono";
 import { inngest, functions } from "./inngest/index.js";
 import { serve } from "inngest/hono";
-import { CompetitionAutomationWorkflow } from "./workflows/competition-workflow.js";
+// Import workflow class for Cloudflare Workflows binding
+import { CompetitionAutomationWorkflow as WorkflowClass } from "./workflows/competition-workflow.js";
+
+// Re-export for Cloudflare Workflows (named export required)
+export const CompetitionAutomationWorkflow = WorkflowClass;
 
 type Bindings = {
 	DATABASE_URL: string;
@@ -140,9 +144,6 @@ app.on(["GET", "PUT", "POST"], "/api/inngest",
 		}),
 	})
 );
-
-// Export Cloudflare Workflow class (bound as MY_WORKFLOW in wrangler.jsonc)
-export { CompetitionAutomationWorkflow };
 
 // Scheduled handler for Cron Triggers
 // This is called by Cloudflare Workers when the cron schedule is triggered
