@@ -55,9 +55,9 @@ export const CompetitionSchema = z.object({
     .describe("Competition format: Online/Offline/Hybrid. Return null if not found"),
 
   participationType: z
-    .union([z.enum(["Individual", "Team"]), z.array(z.enum(["Individual", "Team"]))])
+    .enum(["Individual", "Team"])
     .nullish()
-    .describe("Participation type: Individual or Team or both. Return null if not found"),
+    .describe("Participation type: Individual or Team (single value). Return null if not found"),
 
   pricing: z
     .union([z.number(), z.string(), z.array(z.union([z.number(), z.string()]))])
@@ -134,10 +134,9 @@ export const MISTRAL_JSON = {
     participationType: {
       anyOf: [
         { type: "string", enum: ["Individual", "Team"] },
-        { type: "array", items: { type: "string", enum: ["Individual", "Team"] } },
         { type: "null" }
       ],
-      description: "Participation type (Individual, Team). Return null if not found."
+      description: "Participation type (Individual or Team, single value). Return null if not found."
     },
     pricing: {
       anyOf: [

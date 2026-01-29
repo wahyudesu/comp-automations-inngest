@@ -2,7 +2,6 @@ import { scrape as igScrape } from "../workflow/1.ig-scrape.js";
 import { insertToDb } from "../workflow/3.insertdb.js";
 import { createLogger, type EnhancedLogger } from "../utils/enhanced-logger.js";
 import type { Env } from "../workflow/lib/types.js";
-import { inngest } from "../inngest/index.js";
 
 /**
  * Cloudflare Workers Workflow - Competition Automation
@@ -155,67 +154,8 @@ export class CompetitionAutomationWorkflow {
 	}
 
 	/**
-	 * Step 4: Trigger Inngest for AI Processing
-	 */
-	async step4_triggerInngest(input: {
-		recordIds: number[];
-		source: string;
-	}): Promise<{
-		triggered: boolean;
-		recordCount: number;
-	}> {
-		const log = createLogger({ workflowStep: "cf-workflow-step4" });
-		log.info("Workflow Step 4: Triggering Inngest", {
-			recordIds: input.recordIds,
-		});
-
-		if (input.recordIds.length === 0) {
-			log.info("No new records to process, skipping Inngest trigger");
-			return { triggered: false, recordCount: 0 };
-		}
-
-		// Prepare env object to send with event (needed for Inngest functions)
-		const envForInngest = {
-			DATABASE_URL: this.env.DATABASE_URL,
-			R2_ACCESS_KEY_ID: this.env.R2_ACCESS_KEY_ID,
-			R2_SECRET_ACCESS_KEY: this.env.R2_SECRET_ACCESS_KEY,
-			R2_ENDPOINT: this.env.R2_ENDPOINT,
-			R2_BUCKET: this.env.R2_BUCKET,
-			R2_PUBLIC_URL: this.env.R2_PUBLIC_URL,
-			WAHA_BASE_URL: this.env.WAHA_BASE_URL,
-			WAHA_API_KEY: this.env.WAHA_API_KEY,
-			WA_SESSION_ID: this.env.WA_SESSION_ID,
-			WHATSAPP_CHANNEL_ID: this.env.WHATSAPP_CHANNEL_ID,
-		};
-
-		try {
-			await inngest.send({
-				name: "process/batches.start",
-				data: {
-					recordIds: input.recordIds,
-					source: input.source,
-					env: envForInngest,
-				},
-			});
-
-			log.info("Workflow Step 4: Inngest triggered successfully", {
-				recordCount: input.recordIds.length,
-			});
-
-			return {
-				triggered: true,
-				recordCount: input.recordIds.length,
-			};
-		} catch (error) {
-			log.error("Failed to trigger Inngest", {
-				error: error instanceof Error ? error.message : String(error),
-			});
-			throw error;
-		}
-	}
-
-	/**
 	 * Main Workflow Run - connects all steps
+	 * Note: Inngest trigger is now handled by scheduled handler using waitUntil
 	 */
 	async run(params: CompetitionWorkflowParams = {}): Promise<CompetitionWorkflowResult> {
 		const log = createLogger({ workflowStep: "cf-workflow-main" });
@@ -245,11 +185,8 @@ export class CompetitionAutomationWorkflow {
 				posts: uploadResult.posts,
 			});
 
-			// Step 4: Trigger Inngest
-			await this.step4_triggerInngest({
-				recordIds: insertResult.newRecordIds,
-				source: "instagram",
-			});
+			// Inngest trigger is now handled by scheduled handler (src/index.ts)
+			// using waitUntil to prevent PromiseFulfiller errors
 
 			return {
 				success: true,

@@ -25,7 +25,6 @@
     "enabled": true,
     "head_sampling_rate": 1
   },
-  "log_level": "warn"
 }
 
 // Environment variables yang dibutuhkan (set via .dev.vars untuk local atau wrangler secret untuk production):

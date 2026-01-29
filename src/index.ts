@@ -172,11 +172,49 @@ export default {
 		const workflow = new CompetitionAutomationWorkflow();
 		workflow.env = env;
 
-		// Don't await - run in background
+		// Run workflow and then trigger Inngest with waitUntil (non-blocking)
 		ctx.waitUntil(
-			workflow.run().catch((error) => {
-				log.error("Workflow failed", { error });
-			})
+			(async () => {
+				try {
+					const result = await workflow.run();
+
+					// Only trigger Inngest if workflow succeeded and has new records
+					if (result.success && result.newRecordIds.length > 0) {
+						log.info("Triggering Inngest batch processing", {
+							recordCount: result.newRecordIds.length,
+						});
+
+						// Use waitUntil for inngest.send to prevent blocking
+						ctx.waitUntil(
+							inngest
+								.send({
+									name: "process/batches.start",
+									data: {
+										recordIds: result.newRecordIds,
+										source: "instagram",
+										env: {
+											DATABASE_URL: env.DATABASE_URL,
+											R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID,
+											R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY,
+											R2_ENDPOINT: env.R2_ENDPOINT,
+											R2_BUCKET: env.R2_BUCKET,
+											R2_PUBLIC_URL: env.R2_PUBLIC_URL,
+											WAHA_BASE_URL: env.WAHA_BASE_URL,
+											WAHA_API_KEY: env.WAHA_API_KEY,
+											WA_SESSION_ID: env.WA_SESSION_ID,
+											WHATSAPP_CHANNEL_ID: env.WHATSAPP_CHANNEL_ID,
+										},
+									},
+								})
+								.catch((error) => {
+									log.error("Failed to send event to Inngest", { error });
+								})
+						);
+					}
+				} catch (error) {
+					log.error("Workflow failed", { error });
+				}
+			})()
 		);
 	},
 };

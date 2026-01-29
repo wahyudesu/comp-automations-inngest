@@ -104,19 +104,19 @@ function normalize(data: any) {
     cleaned.format = null;
   }
 
-  // Validate participationType enum - MUST be array of allowed values
-  if (Array.isArray(data.participationType) && data.participationType.length > 0) {
+  // Validate participationType enum - store as single value (DB column is TEXT, not JSONB)
+  if (typeof data.participationType === "string") {
+    const normalizedPart = normalizeParticipationType(data.participationType);
+    cleaned.participationType = normalizedPart;
+  } else if (Array.isArray(data.participationType) && data.participationType.length > 0) {
+    // Take first valid value from array
     const validTypes = data.participationType
       .map((t: any) => {
         if (typeof t === "string") return normalizeParticipationType(t);
         return null;
       })
       .filter(Boolean);
-    cleaned.participationType = validTypes.length > 0 ? validTypes : null;
-  } else if (typeof data.participationType === "string") {
-    // Handle single string → convert to array
-    const normalizedPart = normalizeParticipationType(data.participationType);
-    cleaned.participationType = normalizedPart !== null ? [normalizedPart] : null;
+    cleaned.participationType = validTypes.length > 0 ? validTypes[0] : null;
   } else {
     cleaned.participationType = null;
   }
