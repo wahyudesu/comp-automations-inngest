@@ -7,9 +7,9 @@ const IG_LOMBA = [
 	"infolomba.indonesia.id",
 	"lomba_mahasiswa",
 	"infolombaeventid",
-	"infolomba",
-	"infolombamahasiswa.id",
-	"infolombaevent.id",
+	// "infolomba",
+	// "infolombamahasiswa.id",
+	// "infolombaevent.id",
 	"pusatinfolomba",
 ] as const;
 
@@ -124,10 +124,10 @@ export function createConfig(env: Record<string, string | undefined> = process.e
 			requestTimeoutMs: 30000,
 		},
 		whatsapp: {
-			baseUrl: getEnv("WAHA_BASE_URL", "https://waha-qxjcatc8.sumopod.in"),
+			baseUrl: "https://waha-qxjcatc8.sumopod.in",
 			apiKey: env.WAHA_API_KEY ?? "",
-			sessionId: getEnv("WA_SESSION_ID", "session_01jx523c9fdzcaev186szgc67h"),
-			channelId: getEnv("WHATSAPP_CHANNEL_ID", "120363421736160206@g.us"),
+			sessionId: "session_01jx523c9fdzcaev186szgc67h",
+			channelId: "120363421736160206@g.us",
 		},
 		db: {
 			ssl: "require",

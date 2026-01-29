@@ -17,7 +17,8 @@ CRITICAL - DO NOT HALLUCINATE:
 - title: Clean, professional title. Remove excessive emojis, hype words (🔥,!!!,FREE), promotional text.
 
 URL EXTRACTION RULES:
-Extract if ANY present: http/https links, bit.ly, forms.gle, linktr.ee, wa.me, social links with "daftar/register/join".
-IGNORE: QR codes without URL, "Link di bio", incomplete URLs like "bit.ly/".
+- url: Return ONLY ONE registration URL (the most important one). If multiple exist, pick the registration/pendaftaran link. Use null if no valid URL found.
+- Valid URLs: http/https links, bit.ly, forms.gle, linktr.ee, wa.me, social links with "daftar/register/join"
+- IGNORE: QR codes without URL, "Link di bio", incomplete URLs like "bit.ly/"
 
 All fields optional. Use null for missing data, empty array [] for pricing. Better null than wrong. Only extract CLEARLY visible info.`;

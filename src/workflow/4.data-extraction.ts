@@ -65,27 +65,13 @@ function normalize(data: any) {
     cleaned.pricing = null;
   }
 
-  // Handle contact - could be string, array of objects, or array of strings
-  if (typeof data.contact === "string") {
-    cleaned.contact = [data.contact];
-  } else if (Array.isArray(data.contact) && data.contact.length > 0) {
-    if (typeof data.contact[0] === "object") {
-      const contacts = data.contact
-        .map((c: any) => {
-          if (typeof c === "object") {
-            return (
-              [c.name, c.phone, c.whatsapp, c.email]
-                .filter(Boolean)
-                .join(" - ") || c.toString()
-            );
-          }
-          return c;
-        })
-        .filter(Boolean);
-      cleaned.contact = contacts.length > 0 ? contacts : null;
-    } else {
-      cleaned.contact = data.contact;
-    }
+  // Handle contact - array of strings
+  if (Array.isArray(data.contact) && data.contact.length > 0) {
+    // Filter to only strings and non-empty values
+    cleaned.contact = data.contact.filter((c: any) => typeof c === "string" && c.trim());
+    if (cleaned.contact.length === 0) cleaned.contact = null;
+  } else if (typeof data.contact === "string" && data.contact.trim()) {
+    cleaned.contact = [data.contact.trim()];
   } else {
     cleaned.contact = null;
   }
@@ -169,8 +155,17 @@ function normalize(data: any) {
   // Handle URL
   // Check both 'url' and 'registrationUrl' (legacy compatibility)
   const urlValue = data.url || data.registrationUrl;
+
   if (typeof urlValue === "string" && urlValue.trim()) {
     cleaned.url = urlValue.trim();
+  } else if (Array.isArray(urlValue) && urlValue.length > 0) {
+    // AI sometimes returns array - take first URL (registration URL preferred)
+    const firstUrl = urlValue[0];
+    if (typeof firstUrl === "string" && firstUrl.trim()) {
+      cleaned.url = firstUrl.trim();
+    } else {
+      cleaned.url = null;
+    }
   } else {
     cleaned.url = null;
   }
@@ -426,6 +421,12 @@ type ModelUsage = {
   gemini: number;
 };
 
+// Per-record extraction details
+type RecordExtractionDetail = {
+  recordId: number;
+  fieldSource: FieldSource;
+};
+
 async function extractSingle(post: any, parentLog?: EnhancedLogger, modelUsage?: ModelUsage) {
   const log = parentLog ?? createLogger({ workflowStep: "4-extract-single" });
   const postLog = log.child({ workflowStep: `4-extract-post-${post.id}` });
@@ -663,7 +664,13 @@ export async function extractData(
   const totalCount = newCount + existingIds.length;
   if (totalCount === 0) {
     log.info("No posts to extract from");
-    return { success: true, count: 0, modelUsage: { zai: 0, mistral: 0, gemini: 0 }, totalDuration: 0 };
+    return {
+      success: true,
+      count: 0,
+      modelUsage: { zai: 0, mistral: 0, gemini: 0 },
+      totalDuration: 0,
+      records: [] as RecordExtractionDetail[],
+    };
   }
 
   log.info("Starting AI data extraction", {
@@ -713,7 +720,13 @@ export async function extractData(
 
     if (posts.length === 0) {
       log.warn("No draft records found in database");
-      return { success: true, count: 0, modelUsage: { zai: 0, mistral: 0, gemini: 0 }, totalDuration: 0 };
+      return {
+        success: true,
+        count: 0,
+        modelUsage: { zai: 0, mistral: 0, gemini: 0 },
+        totalDuration: 0,
+        records: [] as RecordExtractionDetail[],
+      };
     }
 
     log.info("Starting AI extraction for posts", {
@@ -724,6 +737,7 @@ export async function extractData(
     // Extract AI data for each post and IMMEDIATELY update to DB (stream processing)
     let successCount = 0;
     let errorCount = 0;
+    const records: RecordExtractionDetail[] = [];
 
     for (let i = 0; i < posts.length; i++) {
       const post = posts[i];
@@ -743,6 +757,12 @@ export async function extractData(
           `extract-single-post-${post.id}`,
           () => extractSingle(post, log, modelUsage)
         );
+
+        // Collect per-record extraction details
+        records.push({
+          recordId: extracted.id,
+          fieldSource: extracted.fieldSource || {},
+        });
 
         if (extracted.extractionSuccess && extracted.aiAnalysis) {
           await postLog.time(`db-update-${post.id}`, async () => {
@@ -782,12 +802,18 @@ export async function extractData(
       count: successCount,
       modelUsage,
       totalDuration: totalTime,
+      records,
     };
   } catch (error) {
     log.fatal("Fatal error in extraction", error as Error);
     throw error;
   } finally {
-    await sql.end();
+    // Gracefully close connection - ignore errors during cleanup
+    try {
+      await sql.end({ timeout: 1 });
+    } catch {
+      // Ignore cleanup errors
+    }
   }
 }
 

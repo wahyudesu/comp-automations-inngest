@@ -4,18 +4,42 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-01-20",
   "compatibility_flags": ["nodejs_compat"],
-  // "vars": {
-  //   "INNGEST_EVENT_KEY": "your-event-key",
-  //   "INNGEST_SIGNING_KEY": "your-signing-key"
-  // },
-  // "r2_buckets": [
-  //   {
-  //     "binding": "R2",
-  //     "bucket_name": "bucket-competition"
-  //   }
-  // ],
-  // "observability": {
-  //   "enabled": true,
-  //   "head_sampling_rate": 1
-  // }
+  "triggers": {
+    "crons": ["0 8 * * *"]
+  },
+  "workflows": [
+    {
+      "name": "comp-automations",
+      "binding": "MY_WORKFLOW",
+      "class_name": "CompetitionAutomationWorkflow"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MY_BUCKET",
+      "bucket_name": "bucket-competition",
+      "remote": true
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "log_level": "warn"
 }
+
+// Environment variables yang dibutuhkan (set via .dev.vars untuk local atau wrangler secret untuk production):
+// SCRAPING_SECRET_CODE  - Secret code untuk trigger IG scraping via API
+// DATABASE_URL           - PostgreSQL connection string
+// R2_ACCESS_KEY_ID       - R2 access key
+// R2_SECRET_ACCESS_KEY   - R2 secret key
+// R2_ENDPOINT            - R2 endpoint URL
+// R2_BUCKET              - R2 bucket name
+// R2_PUBLIC_URL          - R2 public URL
+// WAHA_BASE_URL          - WAHA API base URL
+// WAHA_API_KEY           - WAHA API key
+// WA_SESSION_ID          - WhatsApp session ID
+// WHATSAPP_CHANNEL_ID    - WhatsApp channel ID
+// MISTRAL_API_KEY        - Mistral API key (optional, for AI extraction)
+// OPENROUTER_API_KEY     - OpenRouter API key (optional, for AI extraction)
+// GOOGLE_API_KEY         - Google API key (optional, for AI extraction)

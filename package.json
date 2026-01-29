@@ -2,8 +2,8 @@
   "name": "comp-automations-inngest",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "dev:inngest": "npm exec --yes inngest-cli@latest dev",
+    "dev": "wrangler dev 2>&1 | grep --line-buffered -v 'api/inngest'",
+    "dev:inngest": "npm exec --yes --ignore-scripts=false inngest-cli@latest dev",
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings"
   },

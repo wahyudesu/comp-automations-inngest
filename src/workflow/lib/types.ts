@@ -67,6 +67,8 @@ export interface Env {
 	WAHA_API_KEY?: string;
 	WA_SESSION_ID?: string;
 	WHATSAPP_CHANNEL_ID?: string;
+	INNGEST_TRIGGER_URL?: string;
+	INNGEST_API_KEY?: string;
 }
 
 /** Result of uploading an image to R2 */

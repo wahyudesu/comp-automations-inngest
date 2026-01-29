@@ -35,49 +35,69 @@ export interface EnhancedLogger {
 /** Shared timers map across all loggers */
 const timers = new Map<string, number>();
 
+/** Format message with data into simple string */
+function formatMessage(message: string, data?: Record<string, unknown>): string {
+	if (!data || Object.keys(data).length === 0) return message;
+	const parts = [message];
+	for (const [key, value] of Object.entries(data)) {
+		if (key === "duration" && typeof value === "number") {
+			parts.push(`(${(value / 1000).toFixed(1)}s)`);
+		} else if (key === "count" || key === "validCount" || key === "sent" || key === "skipped") {
+			parts.push(`${value}`);
+		} else if (key === "username" || key === "source") {
+			parts.push(`@${value}`);
+		} else if (key === "status" && value === "error") {
+			parts.push("✗");
+		}
+	}
+	return parts.join(" ");
+}
+
+/** Get prefix based on workflow step */
+function getPrefix(workflowStep?: string): string {
+	if (!workflowStep) return "  ";
+	if (workflowStep.includes("ig-scrape")) return "  [ig] ";
+	if (workflowStep.includes("web-scrape")) return "  [web] ";
+	if (workflowStep.includes("upload-r2")) return "  [r2] ";
+	if (workflowStep.includes("insert-db")) return "  [db] ";
+	if (workflowStep.includes("extract") || workflowStep.includes("ai")) return "  [ai] ";
+	if (workflowStep.includes("whatsapp") || workflowStep.includes("wa")) return "  [wa] ";
+	if (workflowStep.includes("cf-workers-cron")) return "→ ";
+	return "  ";
+}
+
 /**
- * Create an enhanced logger with structured logging.
+ * Create an enhanced logger with clean, readable logging.
  */
 export function createLogger(config: LoggerConfig = {}): EnhancedLogger {
 	const context: LoggerContext = { ...config };
 
-	const log = (
-		level: string,
-		message: string,
-		data?: Record<string, unknown>,
-	) => {
-		const timestamp = new Date().toISOString();
-		const logData = {
-			timestamp,
-			level,
-			message,
-			...context,
-			...(data || {}),
-		};
-		console.log(JSON.stringify(logData));
-	};
-
 	return {
 		info(message: string, data?: Record<string, unknown>) {
-			log("info", message, data);
+			const prefix = getPrefix(context.workflowStep);
+			console.log(`${prefix}${formatMessage(message, data)}`);
 		},
 		warn(message: string, data?: Record<string, unknown>) {
-			log("warn", message, data);
+			const prefix = getPrefix(context.workflowStep);
+			console.warn(`${prefix}⚠ ${formatMessage(message, data)}`);
 		},
 		error(message: string, data?: Record<string, unknown>) {
-			log("error", message, data);
+			const prefix = getPrefix(context.workflowStep);
+			console.error(`${prefix}✗ ${formatMessage(message, data)}`);
 		},
 		debug(message: string, data?: Record<string, unknown>) {
-			log("debug", message, data);
+			// Only log debug in development
+			if (process.env.NODE_ENV !== "production") {
+				const prefix = getPrefix(context.workflowStep);
+				console.log(`${prefix}· ${formatMessage(message, data)}`);
+			}
 		},
 		fatal(message: string, error?: Error, data?: Record<string, unknown>) {
-			const errorData = {
-				name: error?.name,
-				message: error?.message,
-				stack: error?.stack,
-				...data,
-			};
-			log("fatal", message, errorData);
+			const prefix = getPrefix(context.workflowStep);
+			console.error(`${prefix}💀 ${message}`);
+			if (error?.message && !error.message.includes("AxiosError")) {
+				console.error(`${prefix}   ${error.message}`);
+			}
 		},
 		child(childContext: LoggerConfig): EnhancedLogger {
 			return createLogger({
@@ -104,7 +124,10 @@ export function createLogger(config: LoggerConfig = {}): EnhancedLogger {
 				return await fn();
 			} finally {
 				const duration = Date.now() - startTime;
-				this.debug(`Timer: ${key}`, { duration });
+				// Only log timer in non-production
+				if (process.env.NODE_ENV !== "production") {
+					this.debug(`${key}`, { duration });
+				}
 			}
 		},
 	};
@@ -119,7 +142,8 @@ export interface LogErrorOptions {
 }
 
 /**
- * Log an error with enhanced context.
+ * Log an error with simplified output.
+ * For Axios/external API errors, shows minimal info.
  */
 export function logError(
 	logger: EnhancedLogger,
@@ -133,12 +157,24 @@ export function logError(
 		metadata = {},
 	} = options;
 
+	// Simplify Axios/external API errors
+	if (error.message.includes("AxiosError") || error.message.includes("status code")) {
+		const match = error.message.match(/status code (\d+)/);
+		const status = match ? match[1] : "?";
+		const urlMatch = error.message.match(/\/api\/v1\/media\/([A-Za-z0-9_-]+)/);
+		const mediaId = urlMatch ? urlMatch[1] : "";
+
+		if (mediaId) {
+			logger.warn(`IG API ${status}: ${mediaId}`, { recoverable });
+		} else {
+			logger.warn(`API ${status}: ${operation}`, { recoverable });
+		}
+		return;
+	}
+
+	// For other errors, show simple message
 	logger.error(error.message, {
 		operation,
-		category,
 		recoverable,
-		name: error.name,
-		stack: error.stack,
-		...metadata,
 	});
 }

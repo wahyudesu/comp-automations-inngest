@@ -85,10 +85,11 @@ async function uploadSingleImage(
 	post: PostData,
 	s3Client: S3Client,
 	retryConfig: RetryConfig,
+	r2Bucket: string,
+	r2PublicUrl: string,
 	parentLog?: EnhancedLogger,
 ): Promise<UploadResult> {
 	const log = parentLog ?? createLogger({ workflowStep: "2-upload-single" });
-	const r2Config = config.r2;
 	const imageUrl = post.image;
 
 	if (!imageUrl || !imageUrl.startsWith("http")) {
@@ -152,7 +153,7 @@ async function uploadSingleImage(
 			await attemptLog.time(`upload-to-r2-${attempt}`, async () => {
 				await s3Client.send(
 					new PutObjectCommand({
-						Bucket: r2Config.bucket,
+						Bucket: r2Bucket,
 						Key: filename,
 						Body: new Uint8Array(buffer),
 						ContentType: response.headers.get("content-type") ?? "image/jpeg",
@@ -160,7 +161,7 @@ async function uploadSingleImage(
 				);
 			});
 
-			const r2Url = `${r2Config.publicUrl}/${filename}`;
+			const r2Url = `${r2PublicUrl}/${filename}`;
 			attemptLog.debug("Successfully uploaded to R2", { filename, r2Url });
 
 			return {
@@ -259,7 +260,14 @@ export async function uploadToR2(
 			title: post.title?.substring(0, 50),
 		});
 
-		const result = await uploadSingleImage(post, s3Client, configWithDefaults, postLog);
+		const result = await uploadSingleImage(
+			post,
+			s3Client,
+			configWithDefaults,
+			r2Config.bucket,
+			r2Config.publicUrl,
+			postLog,
+		);
 
 		if (result.success) {
 			successCount++;

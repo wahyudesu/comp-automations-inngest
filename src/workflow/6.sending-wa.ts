@@ -122,11 +122,15 @@ async function sendCompetitions(
 		return { sent: 0, skipped: 0 };
 	}
 
+	const WAHA_BASE_URL = "https://waha-qxjcatc8.sumopod.in";
+	const WA_SESSION = "session_01jx523c9fdzcaev186szgc67h";
+	const WHATSAPP_CHANNEL_ID = "120363421736160206@g.us";
+
 	const waConfig: WhatsAppConfig = {
-		baseUrl: config.whatsapp.baseUrl,
-		apiKey: env.WAHA_API_KEY ?? config.whatsapp.apiKey,
-		sessionId: config.whatsapp.sessionId,
-		channelId: config.whatsapp.channelId,
+		baseUrl: WAHA_BASE_URL,
+		apiKey: env.WAHA_API_KEY,
+		sessionId: WA_SESSION,
+		channelId: WHATSAPP_CHANNEL_ID,
 	};
 
 	if (!waConfig.apiKey) {
