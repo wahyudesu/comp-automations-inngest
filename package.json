@@ -5,7 +5,9 @@
     "dev": "wrangler dev 2>&1 | grep --line-buffered -v 'api/inngest'",
     "dev:inngest": "npm exec --yes --ignore-scripts=false inngest-cli@latest dev",
     "deploy": "wrangler deploy --minify",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "test": "bun test",
+    "test:watch": "bun test --watch"  
   },
   "dependencies": {
     "@aduptive/instagram-scraper": "^1.0.3",

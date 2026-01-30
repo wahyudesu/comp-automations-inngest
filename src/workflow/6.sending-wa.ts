@@ -96,7 +96,7 @@ async function sendSingleCompetition(
 	}
 
 	await postLog.time(`db-update-${comp.id}`, async () => {
-		await sql`UPDATE competitions SET status = 'published', "updatedAt" = NOW() WHERE id = ${comp.id}`;
+		await sql`UPDATE competitions SET "whatsappChannel" = true, "updatedAt" = NOW() WHERE id = ${comp.id}`;
 	});
 
 	postLog.info("Successfully sent to WhatsApp", {
@@ -201,7 +201,7 @@ async function fetchDraftCompetitions(
 	return await sql<Competition[]>`
 		SELECT id, title, poster, level, url, "endDate"
 		FROM competitions
-		WHERE status = 'draft'
+		WHERE ("whatsappChannel" = false OR "whatsappChannel" IS NULL)
 			AND title IS NOT NULL
 			AND title != ''
 			AND poster IS NOT NULL
@@ -212,7 +212,7 @@ async function fetchDraftCompetitions(
 }
 
 /**
- * Send ALL competitions with status 'draft' to WhatsApp channel.
+ * Send ALL competitions with whatsappChannel = false to WhatsApp channel.
  * Only sends competitions that have BOTH title AND poster.
  */
 export async function sendAllToWhatsApp(
@@ -236,12 +236,12 @@ export async function sendAllToWhatsApp(
 	});
 
 	try {
-		log.info("Fetching all draft competitions from database");
+		log.info("Fetching competitions with whatsappChannel = false from database");
 
 		const comps = await log.time("db-fetch-all", async () => fetchDraftCompetitions(sql));
 
 		if (!comps.length) {
-			log.warn("No competitions with status 'draft' found (with title + poster)");
+			log.warn("No competitions to send (whatsappChannel = false with title + poster)");
 			return { sent: 0, skipped: 0 };
 		}
 
@@ -262,7 +262,7 @@ export async function sendAllToWhatsApp(
 }
 
 /**
- * Send a RANDOM subset of competitions with status 'draft' to WhatsApp channel.
+ * Send a RANDOM subset of competitions with whatsappChannel = false to WhatsApp channel.
  * Only sends competitions that have BOTH title AND poster.
  */
 export async function sendRandomToWhatsApp(
@@ -287,12 +287,12 @@ export async function sendRandomToWhatsApp(
 	});
 
 	try {
-		log.info("Fetching draft competitions from database for random selection");
+		log.info("Fetching competitions with whatsappChannel = false from database for random selection");
 
 		const comps = await log.time("db-fetch-all", async () => fetchDraftCompetitions(sql));
 
 		if (!comps.length) {
-			log.warn("No competitions with status 'draft' found (with title + poster)");
+			log.warn("No competitions to send (whatsappChannel = false with title + poster)");
 			return { sent: 0, skipped: 0 };
 		}
 

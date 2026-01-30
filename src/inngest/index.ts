@@ -13,7 +13,7 @@ export const inngest = new Inngest({
 });
 
 // ============================================================================
-// Batch Processing: Process Draft Records in Chunks
+// Batch Processing: Process Draft Records in Batches (Sequential)
 // ============================================================================
 
 /**
@@ -57,7 +57,7 @@ function formatFieldSource(fieldSource: Record<string, string | null>): string {
  * Main Batch Processing Function
  *
  * Called by CF Workers after scraping pipeline completes.
- * Processes draft records in batches of 2 with concurrency of 3.
+ * Processes draft records in batches of 2 SEQUENTIALLY to avoid CPU timeout.
  *
  * Event: "process/batches.start"
  * Data: { recordIds: number[], source: string, env: Env }
@@ -77,22 +77,23 @@ export const processDraftBatchesFn = inngest.createFunction(
 
 		const batches = chunk(recordIds, batchSize);
 
-		// Process each batch in parallel
-		const batchResults = await Promise.all(
-			batches.map((batchIds, index) =>
-				step.run(`process-batch-${index + 1}`, async () => {
-					// Extract AI data for this batch using specific record IDs
-					// Pass 0 for newCount since we want specific existing records, not newest ones
-					const extractResult = await extractData(0, batchIds, env);
+		// Process each batch SEQUENTIALLY to avoid CPU timeout
+		const batchResults: any[] = [];
+		for (let index = 0; index < batches.length; index++) {
+			const batchIds = batches[index];
+			const result = await step.run(`process-batch-${index + 1}`, async () => {
+				// Extract AI data for this batch using specific record IDs
+				// Pass 0 for newCount since we want specific existing records, not newest ones
+				const extractResult = await extractData(0, batchIds, env);
 
-					return {
-						batchIndex: index,
-						batchIds,
-						...extractResult,
-					};
-				}),
-			),
-		);
+				return {
+					batchIndex: index,
+					batchIds,
+					...extractResult,
+				};
+			});
+			batchResults.push(result);
+		}
 
 		// Aggregate results
 		const totalProcessed = batchResults.reduce((sum, r) => sum + (r.count || 0), 0);

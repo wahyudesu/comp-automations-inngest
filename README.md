@@ -42,3 +42,22 @@ note:
 - cloudflare workflow pertama itu data scrapping yaitu ig scrapping trus upload to r2 dan insert to db, selesai ini nanti dia hit rest api yg nantinya bakal trigger function di inngest
 - inggest function jalanin  function data extraction dna update db dan mengirimnya ke db yg berjalan secara paralel 2, 2, gitu sampe dikirim ke wa
 
+
+
+## perbaikan variabel lewat prompt
+untuk title lomba itu alur mekanisme nya didapat darimana yah
+
+kategori dipertimbangkan lagi
+
+posternya bukannya ngambil dari R2 database cloudflare yah
+
+perlu pertimbangan ini lomba gak dari teks yg didapet, dan lomba itu identik dengan apa aja
+
+contact perlu disesuaikan ulang
+
+kalau udah bisa berjalan cron dengan baik maka langsung bikin channel wa aja
+
+database nya yg dari sosial media ubah jadi instagram, krna info lomba seuma dtengnya dri instagram
+
+
+schema fix + proses ekstraksi = cron wa channel
