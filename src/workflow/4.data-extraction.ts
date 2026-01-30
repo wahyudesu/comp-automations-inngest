@@ -66,15 +66,15 @@ function normalize(data: any) {
   }
 
   // Handle contact - array of strings
-  if (Array.isArray(data.contact) && data.contact.length > 0) {
-    // Filter to only strings and non-empty values
-    cleaned.contact = data.contact.filter((c: any) => typeof c === "string" && c.trim());
-    if (cleaned.contact.length === 0) cleaned.contact = null;
-  } else if (typeof data.contact === "string" && data.contact.trim()) {
-    cleaned.contact = [data.contact.trim()];
-  } else {
-    cleaned.contact = null;
-  }
+  // if (Array.isArray(data.contact) && data.contact.length > 0) {
+  //   // Filter to only strings and non-empty values
+  //   cleaned.contact = data.contact.filter((c: any) => typeof c === "string" && c.trim());
+  //   if (cleaned.contact.length === 0) cleaned.contact = null;
+  // } else if (typeof data.contact === "string" && data.contact.trim()) {
+  //   cleaned.contact = [data.contact.trim()];
+  // } else {
+  //   cleaned.contact = null;
+  // }
 
   // Handle categories - validate against allowed values
   if (typeof data.categories === "string") {
@@ -448,7 +448,7 @@ async function extractSingle(post: any, parentLog?: EnhancedLogger, modelUsage?:
     format: null,
     participationType: null,
     pricing: null,
-    contact: null,
+    // contact: null,
     url: null,
     location: null,
     categories: null,
@@ -597,7 +597,7 @@ async function extractSingle(post: any, parentLog?: EnhancedLogger, modelUsage?:
       "format",
       "participationType",
       "pricing",
-      "contact",
+      // "contact",
       "url",
       "location",
       "categories",

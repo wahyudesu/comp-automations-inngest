@@ -23,9 +23,10 @@ const geminiModel = google("gemini-2.5-flash");
 const groqModel = groq("openai/gpt-oss-120b");
 
 const zaiAgent = new Agent({
+	id: "zai-agent",
 	name: "zai-agent",
 	instructions: "You are a helpful assistant that extracts competition information from images and text.",
-	model: "zai-coding-plan/glm-4.5v",
+	model: "zai-coding-plan/glm-4.5",
 });
 
 /** Schema output type */

@@ -49,11 +49,9 @@ untuk title lomba itu alur mekanisme nya didapat darimana yah
 
 kategori dipertimbangkan lagi
 
-posternya bukannya ngambil dari R2 database cloudflare yah
+posternya itu apakah ngambil dari R2 database cloudflare? jika iya pertimbangkan step 2 nya 
 
 perlu pertimbangan ini lomba gak dari teks yg didapet, dan lomba itu identik dengan apa aja
-
-contact perlu disesuaikan ulang
 
 kalau udah bisa berjalan cron dengan baik maka langsung bikin channel wa aja
 
@@ -61,3 +59,22 @@ database nya yg dari sosial media ubah jadi instagram, krna info lomba seuma dte
 
 
 schema fix + proses ekstraksi = cron wa channel
+
+1. Scraping Phase (Step 1)                            
+                                                        
+  Web Scraping (1.web-scrape.ts:97-118):                
+  - Title diambil dari elemen HTML                      
+  h2.post-title.entry-title a di infolombait.com        
+  - Disimpan sebagai title field di ScrapedPost         
+                                                        
+  Instagram Scraping (1.ig-scrape.ts:62-70):            
+  - Title di-set ke null (karena postingan Instagram    
+  umumnya tidak punya judul eksplisit)                  
+  - Hanya mengambil caption, url, dan display_url       
+                                                        
+  ---                                                   
+  2. Insert ke Database (Step 3)                        
+                                                        
+  Data dari scraping (dengan title yang mungkin null    
+  atau dari web) disimpan ke tabel competitions dengan  
+  status 'draft'.  bv 

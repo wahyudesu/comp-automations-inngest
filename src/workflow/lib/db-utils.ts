@@ -20,7 +20,7 @@ export function buildUpdateObject(
 	if (ai.format) updates.format = ai.format;
 	if (ai.participationType) updates.participationType = ai.participationType;
 	if (ai.pricing) updates.pricing = sql.json(ai.pricing);
-	if (ai.contact) updates.contact = sql.json(ai.contact);
+	// if (ai.contact) updates.contact = sql.json(ai.contact);
 	if (ai.url) updates.url = ai.url;
 	if (ai.location) updates.location = ai.location;
 	if (ai.prizePool) updates.prizePool = ai.prizePool;

@@ -99,32 +99,43 @@ export const processDraftBatchesFn = inngest.createFunction(
 		const totalProcessed = batchResults.reduce((sum, r) => sum + (r.count || 0), 0);
 		const totalErrors = batchResults.filter((r) => !r.success).length;
 
+		// Build structured summary
+		const structuredSummary = {
+			totalBatches: batches.length,
+			totalRecords: recordIds.length,
+			totalProcessed,
+			totalErrors,
+			batches: batchResults.map((batch) => ({
+				batchNumber: batch.batchIndex + 1,
+				recordIds: batch.batchIds,
+				modelUsage: batch.modelUsage || { zai: 0, mistral: 0, gemini: 0 },
+				records: (batch.records || []).map((record: any) => ({
+					recordId: record.recordId,
+					fieldsByModel: record.fieldSource || {},
+				})),
+			})),
+		};
+
 		// Log detailed per-record breakdown
 		await step.run("log-detailed-results", async () => {
-			// Build a pretty-printed summary
-			const summaryLines: string[] = [];
-			summaryLines.push(`=== Batch Processing Summary ===`);
-			summaryLines.push(`Total batches: ${batches.length}`);
-			summaryLines.push(`Total records: ${recordIds.length}`);
-			summaryLines.push(`Total processed: ${totalProcessed}`);
-			summaryLines.push(``);
+			console.log("=== Batch Processing Summary ===");
+			console.log(`Total batches: ${structuredSummary.totalBatches}`);
+			console.log(`Total records: ${structuredSummary.totalRecords}`);
+			console.log(`Total processed: ${structuredSummary.totalProcessed}`);
+			console.log("");
 
-			for (const batch of batchResults) {
-				summaryLines.push(`[Batch ${batch.batchIndex + 1}] Records: ${batch.batchIds.join(", ")}`);
-				if (batch.modelUsage) {
-					summaryLines.push(`  Model usage: Zai(${batch.modelUsage.zai}), Mistral(${batch.modelUsage.mistral}), Gemini(${batch.modelUsage.gemini})`);
+			for (const batch of structuredSummary.batches) {
+				console.log(`[Batch ${batch.batchNumber}] Records: ${batch.recordIds.join(", ")}`);
+				const { zai, mistral, gemini } = batch.modelUsage;
+				console.log(`  Model usage: Zai(${zai}), Mistral(${mistral}), Gemini(${gemini})`);
+				for (const record of batch.records) {
+					console.log(`  Record ${record.recordId}:`);
+					console.log(`    ${formatFieldSource(record.fieldsByModel)}`);
 				}
-				for (const record of batch.records || []) {
-					summaryLines.push(`  Record ${record.recordId}:`);
-					summaryLines.push(`    ${formatFieldSource(record.fieldSource)}`);
-				}
-				summaryLines.push(``);
+				console.log("");
 			}
 
-			const summary = summaryLines.join("\n");
-			console.log(summary);
-
-			return { summary };
+			return { structuredSummary };
 		});
 
 		// After all batches complete, trigger WhatsApp send
@@ -135,11 +146,8 @@ export const processDraftBatchesFn = inngest.createFunction(
 
 		return {
 			success: true,
-			totalBatches: batches.length,
-			totalRecords: recordIds.length,
-			totalProcessed,
-			totalErrors,
 			source,
+			...structuredSummary,
 		};
 	}
 );

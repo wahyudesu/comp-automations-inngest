@@ -63,10 +63,10 @@ export const CompetitionSchema = z.object({
     .union([z.number(), z.string(), z.array(z.union([z.number(), z.string()]))])
     .nullish()
     .describe("Registration fee in rupiah, 0 means free, Return null if not found"),
-  contact: z
-    .array(z.string())
-    .nullish()
-    .describe("Contact list: array of contact strings (e.g., ['+628123456789', 'WA: 08123456789']). Return null if not found"),
+  // contact: z
+  //   .array(z.string())
+  //   .nullish()
+  //   .describe("Contact list: array of contact strings (e.g., ['+628123456789', 'WA: 08123456789']). Return null if not found"),
 
   url: z.string().nullish().describe("Registration URL link. Return null if not found"),
   location: z.string().nullish().describe("country (e.g., Indonesia, Malaysia, Brunei, etc.)"),
@@ -147,13 +147,13 @@ export const MISTRAL_JSON = {
       ],
       description: "Registration fee in rupiah. Return null if not found."
     },
-    contact: {
-      anyOf: [
-        { type: "array", items: { type: "string" } },
-        { type: "null" }
-      ],
-      description: "Contact list: array of contact strings. Example: ['+628123456789', 'WA: 08123456789', 'CP: Budi']. Return null if not found."
-    },
+    // contact: {
+    //   anyOf: [
+    //     { type: "array", items: { type: "string" } },
+    //     { type: "null" }
+    //   ],
+    //   description: "Contact list: array of contact strings. Example: ['+628123456789', 'WA: 08123456789', 'CP: Budi']. Return null if not found."
+    // },
     url: {
       anyOf: [{ type: "string" }, { type: "null" }],
       description: "Registration URL link. Return null if not found."

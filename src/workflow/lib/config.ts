@@ -8,9 +8,11 @@ const IG_LOMBA = [
 	"lomba_mahasiswa",
 	"infolombaeventid",
 	// "infolomba",
-	// "infolombamahasiswa.id",
-	// "infolombaevent.id",
+	"infolombamahasiswa.id",
+	"infolombaevent.id",
 	"pusatinfolomba",
+	// "lombasmpupdate",
+	// "lombasma"
 ] as const;
 
 /** Retry configuration for API calls */
@@ -106,10 +108,10 @@ export function createConfig(env: Record<string, string | undefined> = process.e
 	return {
 		instagram: {
 			accounts: IG_LOMBA,
-			imageLimit: 4,
-			maxRetries: 2,
-			minDelay: 2000,
-			maxDelay: 5000,
+			imageLimit: 2,
+			maxRetries: 1,
+			minDelay: 500,
+			maxDelay: 1000,
 			timeout: 10000,
 			rateLimitPerMinute: 20,
 			retryDelayMs: RETRY_DELAY_MINUTES * MS_PER_MINUTE,

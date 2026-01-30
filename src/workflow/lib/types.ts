@@ -35,7 +35,7 @@ export interface AIExtractedData {
 	format: CompetitionFormat | null;
 	participationType: ParticipationType | null;
 	pricing: number | string | (number | string)[] | null;
-	contact: string[] | null;
+	// contact: string[] | null;
 	url: string | null;
 	location: string | null;
 	prizePool?: string;

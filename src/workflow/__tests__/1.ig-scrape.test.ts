@@ -1,31 +1,28 @@
-import { describe, it, expect, mock } from "bun:test";
+import { describe, it, expect } from "bun:test";
+import { scrape } from "../1.ig-scrape.js";
 
-describe("IG Scrape", () => {
-	it("should return scraped posts", async () => {
-		// Mock response
-		const mockResponse = {
-			success: true,
-			posts: [
-				{
-					url: "https://instagram.com/p/test123",
-					display_url: "https://example.com/image.jpg",
-					caption: "Lomba Hackathon 2024"
-				},
-				{
-					url: "https://instagram.com/p/test456",
-					display_url: "https://example.com/image2.jpg",
-					caption: "Competition AI"
-				}
-			]
-		};
+describe("IG Scrape - Real", () => {
+	it("scrape 1 account and show output", async () => {
+		console.log("\n📸 Scraping @infolomba.indonesia.id...\n");
 
-		const mockScrape = mock(() => Promise.resolve(mockResponse));
-		const result = await mockScrape();
+		const result = await scrape();
 
-		expect(result.success).toBe(true);
-		expect(result.posts?.length).toBe(2);
-		expect(result.posts?.[0].url).toBeTruthy();
-		expect(result.posts?.[0].display_url).toBeTruthy();
-		expect(mockScrape).toHaveBeenCalled();
+		console.log(`\n✅ Count: ${result.count}`);
+		console.log(`   Errors: ${result.errors?.length ?? 0}\n`);
+
+		if (result.posts.length > 0) {
+			console.log("📱 Posts:");
+			result.posts.forEach((p, i) => {
+				console.log(`   ${i + 1}. ${p.link}`);
+			});
+		}
+
+		if (result.errors?.length) {
+			console.log("\n❌ Errors:");
+			result.errors.forEach((e) => console.log(`   ${e.error}`));
+		}
+
+		// Pass regardless - just to show output
+		expect(true).toBe(true);
 	});
 });

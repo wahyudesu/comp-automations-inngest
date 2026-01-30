@@ -1,4 +1,5 @@
 import { scrape as igScrape } from "../workflow/1.ig-scrape.js";
+import { uploadToR2 } from "../workflow/2.upload-to-r2.js";
 import { insertToDb } from "../workflow/3.insertdb.js";
 import { createLogger, type EnhancedLogger } from "../utils/enhanced-logger.js";
 import type { Env } from "../workflow/lib/types.js";
@@ -10,6 +11,9 @@ import type { Env } from "../workflow/lib/types.js";
  *
  * Ini berjalan di Cloudflare Workflows dengan retry otomatis
  * dan step-based execution yang durable.
+ *
+ * Step 2 (R2 Upload) sekarang AKTIF - gambar akan diupload ke Cloudflare R2
+ * dan URL di database akan berupa R2 public URL (bukan URL Instagram asli).
  */
 
 export interface CompetitionWorkflowParams {
@@ -83,20 +87,26 @@ export class CompetitionAutomationWorkflow {
 		}>;
 	}> {
 		const log = createLogger({ workflowStep: "cf-workflow-step2" });
-		log.info("Workflow Step 2: Skipping R2 upload (using original IG URLs)", {
+		log.info("Workflow Step 2: Uploading images to R2", {
 			count: input.posts.length,
 		});
 
-		// Skip R2 upload for now - use original IG URLs directly due to local dev SSL issues
-		const postsForDb = input.posts.map((p) => ({
+		// Upload to R2 - returns posts with R2 URLs (or original if upload fails)
+		const uploadedPosts = await uploadToR2(input.posts, this.env, {}, log);
+
+		const postsForDb = uploadedPosts.map((p) => ({
 			title: p.title ?? null,
 			link: p.link,
-			image: p.image, // Keep original IG URL
+			image: p.image, // Now R2 URL (or original if upload failed)
 			description: p.description || "",
 		}));
 
+		log.info("Workflow Step 2: R2 upload completed", {
+			total: postsForDb.length,
+		});
+
 		return {
-			uploadedCount: input.posts.length,
+			uploadedCount: postsForDb.length,
 			posts: postsForDb,
 		};
 	}
