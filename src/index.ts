@@ -139,9 +139,7 @@ app.on(["GET", "PUT", "POST"], "/api/inngest",
 	serve({
 		client: inngest,
 		functions,
-		resolver: (c) => ({
-			env: c.env, // Provide Cloudflare bindings to Inngest functions
-		}),
+		signingKey: process.env.INNGEST_SIGNING_KEY as string,
 	})
 );
 

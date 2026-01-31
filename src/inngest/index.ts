@@ -10,6 +10,7 @@ import { sendAllToWhatsApp } from "../workflow/6.sending-wa.js";
  */
 export const inngest = new Inngest({
 	id: "comp-automations",
+	eventKey: process.env.INNGEST_EVENT_KEY as string,
 });
 
 // ============================================================================
