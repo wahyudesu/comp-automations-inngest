@@ -58,6 +58,9 @@ export interface DbCompetition {
 /** Environment configuration */
 export interface Env {
 	DATABASE_URL: string;
+	/** Native R2 bucket binding (does not count toward subrequest limit) */
+	MY_BUCKET: R2Bucket;
+	/** Legacy R2 credentials for S3 SDK (fallback, not recommended) */
 	R2_ACCESS_KEY_ID?: string;
 	R2_SECRET_ACCESS_KEY?: string;
 	R2_ENDPOINT?: string;
@@ -69,6 +72,7 @@ export interface Env {
 	WHATSAPP_CHANNEL_ID?: string;
 	INNGEST_TRIGGER_URL?: string;
 	INNGEST_API_KEY?: string;
+	TRIGGER_SECRET_CODE?: string;
 }
 
 /** Result of uploading an image to R2 */

@@ -1,4 +1,3 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import {
 	createLogger,
 	type EnhancedLogger,
@@ -8,7 +7,7 @@ import {
 import { config } from "./lib/config.js";
 import type { UploadResult, Env } from "./lib/types.js";
 
-/** Retry configuration for R2 uploads */
+/** Retry configuration for fetching images from Instagram */
 interface RetryConfig {
 	maxAttempts: number;
 	baseDelayMs: number;
@@ -81,11 +80,14 @@ interface PostData {
 	image: string;
 }
 
+/**
+ * Upload single image to R2 using native R2 binding.
+ * Native R2 operations do NOT count toward Cloudflare Workers subrequest limit.
+ */
 async function uploadSingleImage(
 	post: PostData,
-	s3Client: S3Client,
+	r2Bucket: R2Bucket,
 	retryConfig: RetryConfig,
-	r2Bucket: string,
 	r2PublicUrl: string,
 	parentLog?: EnhancedLogger,
 ): Promise<UploadResult> {
@@ -111,6 +113,7 @@ async function uploadSingleImage(
 				maxAttempts: retryConfig.maxAttempts,
 			});
 
+			// Step 1: Fetch image from Instagram (counts as subrequest)
 			const response = await attemptLog.time(
 				`fetch-image-${attempt}`,
 				async () =>
@@ -142,6 +145,7 @@ async function uploadSingleImage(
 				contentType: response.headers.get("content-type"),
 			});
 
+			// Step 2: Upload to R2 using native binding (does NOT count as subrequest)
 			const sanitizedTitle = post.title
 				? post.title
 						.replace(/[^a-z0-9]/gi, "_")
@@ -151,14 +155,11 @@ async function uploadSingleImage(
 			const filename = `${Date.now()}-${sanitizedTitle}.jpg`;
 
 			await attemptLog.time(`upload-to-r2-${attempt}`, async () => {
-				await s3Client.send(
-					new PutObjectCommand({
-						Bucket: r2Bucket,
-						Key: filename,
-						Body: new Uint8Array(buffer),
-						ContentType: response.headers.get("content-type") ?? "image/jpeg",
-					}),
-				);
+				await r2Bucket.put(filename, buffer, {
+					httpMetadata: {
+						contentType: response.headers.get("content-type") ?? "image/jpeg",
+					},
+				});
 			});
 
 			const r2Url = `${r2PublicUrl}/${filename}`;
@@ -216,30 +217,18 @@ export async function uploadToR2(
 	const log = parentLog ?? createLogger({ workflowStep: "2-upload-r2" });
 	const r2Config = config.r2;
 
-	const accessKeyId = env.R2_ACCESS_KEY_ID ?? process.env.R2_ACCESS_KEY_ID;
-	const secretAccessKey = env.R2_SECRET_ACCESS_KEY ?? process.env.R2_SECRET_ACCESS_KEY;
+	// Use native R2 binding - does NOT count toward subrequest limit
+	const r2Bucket = env.MY_BUCKET;
+	const r2PublicUrl = env.R2_PUBLIC_URL ?? r2Config.publicUrl;
 
-	if (!accessKeyId || !secretAccessKey) {
-		log.warn(
-			"R2 credentials not found, skipping upload and returning original URLs",
-			{
-				hasAccessKeyId: !!accessKeyId,
-				hasSecretAccessKey: !!secretAccessKey,
-			},
-		);
+	if (!r2Bucket) {
+		log.warn("R2 bucket binding not found, skipping upload and returning original URLs", {
+			hasR2Bucket: !!r2Bucket,
+		});
 		return posts;
 	}
 
-	log.info("Starting R2 upload", { postCount: posts.length });
-
-	const s3Client = new S3Client({
-		region: "auto",
-		endpoint: r2Config.endpoint,
-		credentials: {
-			accessKeyId,
-			secretAccessKey,
-		},
-	});
+	log.info("Starting R2 upload using native binding", { postCount: posts.length });
 
 	const configWithDefaults = { ...DEFAULT_RETRY_CONFIG, ...retryConfig };
 	const updatedPosts: PostData[] = [];
@@ -262,10 +251,9 @@ export async function uploadToR2(
 
 		const result = await uploadSingleImage(
 			post,
-			s3Client,
+			r2Bucket,
 			configWithDefaults,
-			r2Config.bucket,
-			r2Config.publicUrl,
+			r2PublicUrl,
 			postLog,
 		);
 
