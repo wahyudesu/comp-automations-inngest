@@ -6,11 +6,11 @@
 const IG_LOMBA = [
   "infolomba.indonesia.id",
   "lomba_mahasiswa",
-  "infolombaeventid",
+  "infolombaeventid", // ok
   // "infolomba",
   "infolombamahasiswa.id",
-  "infolombaevent.id",
-  "pusatinfolomba",
+  "infolombaevent.id", //ok
+  "pusatinfolomba", //ok
   // "lombasmpupdate",
   // "lombasma"
 ] as const;
@@ -110,7 +110,7 @@ export function createConfig(
   return {
     instagram: {
       accounts: IG_LOMBA,
-      imageLimit: 2,
+      imageLimit: 4,
       maxRetries: 1,
       minDelay: 500,
       maxDelay: 1000,

@@ -13,6 +13,15 @@ function randomDelay(minMs: number, maxMs: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
+/** Maximum retry attempts per account */
+const MAX_RETRY_PER_ACCOUNT = 3;
+
+/** Delay between retries (5 minutes) */
+const RETRY_DELAY_MS = 5 * 60 * 1000;
+
+/** Error codes that should trigger a retry with delay */
+const RETRYABLE_ERROR_CODES = ["429", "429_TOO_MANY_REQUESTS", "RATE_LIMITED"];
+
 async function scrapeOnce(
 	log: EnhancedLogger,
 	usernames: readonly string[],
@@ -40,66 +49,134 @@ async function scrapeOnce(
 			workflowStep: `1-ig-scrape-${username}`,
 		});
 
-		try {
-			await randomDelay(igConfig.minDelay, igConfig.maxDelay);
+		let attempt = 0;
+		let lastError: { error: string; code?: string } | null = null;
+		let succeeded = false;
 
-			const results = await accountLog.time(
-				`instagram-fetch-${username}`,
-				async () => await scraper.getPosts(username, igConfig.imageLimit),
-			);
+		while (attempt < MAX_RETRY_PER_ACCOUNT && !succeeded) {
+			attempt++;
 
-			if (results.success && results.posts) {
-				const validPosts = results.posts.filter(
-					(post) => post.display_url && post.url,
+			try {
+				// Add delay before retry (not on first attempt)
+				if (attempt > 1) {
+					accountLog.info(`Retrying account ${username} after ${RETRY_DELAY_MS / 60000} min delay`, {
+						username,
+						attempt,
+						maxAttempts: MAX_RETRY_PER_ACCOUNT,
+					});
+					await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+				} else {
+					await randomDelay(igConfig.minDelay, igConfig.maxDelay);
+				}
+
+				const results = await accountLog.time(
+					`instagram-fetch-${username}-${attempt}`,
+					async () => await scraper.getPosts(username, igConfig.imageLimit),
 				);
 
-				accountLog.info("Fetched valid posts", {
-					username,
-					validCount: validPosts.length,
-					totalCount: results.posts.length,
-				});
+				if (results.success && results.posts) {
+					const validPosts = results.posts.filter(
+						(post) => post.display_url && post.url,
+					);
 
-				for (const post of validPosts) {
-					posts.push({
-						title: null,
-						link: post.url,
-						image: post.display_url,
-						description: post.caption || "",
-						source: "instagram",
+					accountLog.info("Fetched valid posts", {
 						username,
+						validCount: validPosts.length,
+						totalCount: results.posts.length,
+						attempt,
 					});
+
+					for (const post of validPosts) {
+						posts.push({
+							title: null,
+							link: post.url,
+							image: post.display_url,
+							description: post.caption || "",
+							source: "instagram",
+							username,
+						});
+					}
+					succeeded = true;
+				} else {
+					const errorMsg = results.error ?? "Unknown error";
+					lastError = { error: errorMsg, code: errorMsg };
+
+					// Check if error is retryable
+					const isRetryable = RETRYABLE_ERROR_CODES.some((code) =>
+						errorMsg.includes(code) || errorMsg === code,
+					);
+
+					if (isRetryable && attempt < MAX_RETRY_PER_ACCOUNT) {
+						accountLog.warn(`Failed to fetch posts (retryable): ${errorMsg}`, {
+							username,
+							errorCode: errorMsg,
+							attempt,
+							willRetry: true,
+						});
+						// Continue to next iteration for retry
+					} else {
+						accountLog.error(`Failed to fetch posts (non-retryable or max retries): ${errorMsg}`, {
+							username,
+							errorCode: errorMsg,
+							attempt,
+							willRetry: false,
+						});
+						errors.push({ username, error: errorMsg, code: errorMsg });
+						break; // Exit retry loop
+					}
 				}
-			} else {
-				const errorMsg = results.error ?? "Unknown error";
-				errors.push({ username, error: errorMsg, code: errorMsg });
-				accountLog.warn(`Failed to fetch posts: ${errorMsg}`, {
-					username,
-					errorCode: errorMsg,
-				});
+			} catch (error) {
+				let errorMsg = "Unknown error";
+				let errorCode: string | undefined;
+
+				if (error instanceof ScrapeError) {
+					errorMsg = error.message;
+					errorCode = error.code;
+				} else if (error instanceof Error) {
+					errorMsg = error.message;
+				}
+
+				lastError = { error: errorMsg, code: errorCode };
+
+				// Check if error is retryable
+				const isRetryable =
+					RETRYABLE_ERROR_CODES.some((code) =>
+						errorMsg.includes(code) || errorCode === code,
+					) || errorMsg.includes("429");
+
+				if (isRetryable && attempt < MAX_RETRY_PER_ACCOUNT) {
+					accountLog.warn(`Exception occurred (retryable): ${errorMsg}`, {
+						username,
+						errorCode,
+						attempt,
+						willRetry: true,
+					});
+					// Continue to next iteration for retry
+				} else {
+					errors.push({ username, error: errorMsg, code: errorCode });
+
+					logError(
+						accountLog,
+						error instanceof Error ? error : new Error(errorMsg),
+						{
+							operation: "instagram-scrape",
+							category: ErrorCategory.NETWORK,
+							recoverable: true,
+							metadata: { username, errorCode, attempt },
+						},
+					);
+					break; // Exit retry loop
+				}
 			}
-		} catch (error) {
-			let errorMsg = "Unknown error";
-			let errorCode: string | undefined;
+		}
 
-			if (error instanceof ScrapeError) {
-				errorMsg = error.message;
-				errorCode = error.code;
-			} else if (error instanceof Error) {
-				errorMsg = error.message;
-			}
-
-			errors.push({ username, error: errorMsg, code: errorCode });
-
-			logError(
-				accountLog,
-				error instanceof Error ? error : new Error(errorMsg),
-				{
-					operation: "instagram-scrape",
-					category: ErrorCategory.NETWORK,
-					recoverable: true,
-					metadata: { username, errorCode },
-				},
-			);
+		// Log if account was skipped after max retries
+		if (!succeeded && attempt >= MAX_RETRY_PER_ACCOUNT) {
+			accountLog.error(`Account ${username} skipped after ${MAX_RETRY_PER_ACCOUNT} failed attempts`, {
+				username,
+				maxAttemptsReached: true,
+				lastError: lastError?.error,
+			});
 		}
 	}
 
