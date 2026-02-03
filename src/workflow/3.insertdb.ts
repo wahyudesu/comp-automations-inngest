@@ -107,61 +107,41 @@ export async function insertToDb(
 
 		log.startTimer("db-insert-total");
 
-		const newRecordIds: number[] = [];
+		// Use batch INSERT to reduce subrequest count (single query instead of N queries)
+		const insertValues = filteredPosts.map((post) => [
+			post.title ?? "",
+			post.description ?? "",
+			post.image ?? "",
+			post.link ?? "",
+			"draft",
+		]);
 
-		for (let i = 0; i < filteredPosts.length; i++) {
-			const post = filteredPosts[i];
-			const postLog = log.child({
-				workflowStep: `3-insert-post-${i}`,
-			});
+		const result = await log.time(`db-insert-batch`, async () => {
+			return await sql`
+				INSERT INTO competitions (
+					title,
+					description,
+					poster,
+					urlsource,
+					status
+				) SELECT * FROM ${sql(insertValues)}
+				RETURNING id
+			`;
+		});
 
-			const title = post.title ?? "";
-			const description = post.description ?? "";
-			const poster = post.image ?? "";
-			const urlsource = post.link ?? "";
-
-			const result = await postLog.time(`db-insert-${i}`, async () => {
-				return await sql`
-					INSERT INTO competitions (
-						title,
-						description,
-						poster,
-						urlsource,
-						status
-					) VALUES (
-						${title},
-						${description},
-						${poster},
-						${urlsource},
-						'draft'
-					)
-					RETURNING id
-				`;
-			});
-
-			if (result && result.length > 0) {
-				newRecordIds.push(result[0].id);
-			}
-
-			postLog.debug("Inserted draft record", {
-				title: title.substring(0, 50),
-				index: i + 1,
-				total: filteredPosts.length,
-				recordId: result[0]?.id,
-			});
-		}
+		const newRecordIds = result.map((r) => r.id);
 
 		const totalTime = log.endTimer("db-insert-total");
 
 		log.info("All posts saved successfully to database", {
-			count: filteredPosts.length,
+			count: newRecordIds.length,
 			totalDuration: Math.round(totalTime),
-			avgDuration: Math.round(totalTime / filteredPosts.length),
+			avgDuration: newRecordIds.length > 0 ? Math.round(totalTime / newRecordIds.length) : 0,
 		});
 
 		return {
 			success: true,
-			count: filteredPosts.length,
+			count: newRecordIds.length,
 			newRecordIds,
 			skipped,
 		};

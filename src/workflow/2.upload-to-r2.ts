@@ -208,10 +208,24 @@ async function uploadSingleImage(
 	};
 }
 
+/** Batch configuration for R2 uploads */
+interface BatchConfig {
+	/** Maximum images to upload per batch (Cloudflare Free: 50 subrequests, use 40 for safety) */
+	maxBatchSize: number;
+	/** Delay in milliseconds between batches */
+	batchDelayMs: number;
+}
+
+const DEFAULT_BATCH_CONFIG = {
+	maxBatchSize: 40,
+	batchDelayMs: 2000,
+} as const satisfies BatchConfig;
+
 export async function uploadToR2(
 	posts: PostData[],
 	env: Env,
 	retryConfig: Partial<RetryConfig> = {},
+	batchConfig: Partial<BatchConfig> = {},
 	parentLog?: EnhancedLogger,
 ): Promise<PostData[]> {
 	const log = parentLog ?? createLogger({ workflowStep: "2-upload-r2" });
@@ -231,49 +245,78 @@ export async function uploadToR2(
 	log.info("Starting R2 upload using native binding", { postCount: posts.length });
 
 	const configWithDefaults = { ...DEFAULT_RETRY_CONFIG, ...retryConfig };
+	const batchConfigWithDefaults = { ...DEFAULT_BATCH_CONFIG, ...batchConfig };
 	const updatedPosts: PostData[] = [];
 	let successCount = 0;
 	let failureCount = 0;
 
 	log.startTimer("r2-upload-total");
 
-	for (let i = 0; i < posts.length; i++) {
-		const post = posts[i];
-		const postLog = log.child({
-			workflowStep: `2-upload-post-${i}`,
+	// Split posts into batches to avoid subrequest limit
+	const batchSize = batchConfigWithDefaults.maxBatchSize;
+	const totalBatches = Math.ceil(posts.length / batchSize);
+
+	log.info(`Processing ${posts.length} posts in ${totalBatches} batches`, {
+		batchSize,
+		totalBatches,
+	});
+
+	for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+		const startIdx = batchIndex * batchSize;
+		const endIdx = Math.min(startIdx + batchSize, posts.length);
+		const batch = posts.slice(startIdx, endIdx);
+
+		log.info(`Processing batch ${batchIndex + 1}/${totalBatches}`, {
+			batchSize: batch.length,
+			range: `${startIdx + 1}-${endIdx}`,
 		});
 
-		postLog.debug("Processing post", {
-			index: i + 1,
-			total: posts.length,
-			title: post.title?.substring(0, 50),
-		});
-
-		const result = await uploadSingleImage(
-			post,
-			r2Bucket,
-			configWithDefaults,
-			r2PublicUrl,
-			postLog,
-		);
-
-		if (result.success) {
-			successCount++;
-			postLog.debug("Upload successful", { r2Url: result.r2Url });
-			updatedPosts.push({
-				...post,
-				image: result.r2Url!,
+		// Process all posts in this batch
+		for (let i = 0; i < batch.length; i++) {
+			const post = batch[i];
+			const globalIndex = startIdx + i;
+			const postLog = log.child({
+				workflowStep: `2-upload-post-${globalIndex}`,
 			});
-		} else {
-			failureCount++;
-			postLog.error("Upload failed", {
+
+			postLog.debug("Processing post", {
+				index: globalIndex + 1,
+				total: posts.length,
 				title: post.title?.substring(0, 50),
-				error: result.error,
 			});
-			updatedPosts.push({
-				...post,
-				image: result.originalUrl,
-			});
+
+			const result = await uploadSingleImage(
+				post,
+				r2Bucket,
+				configWithDefaults,
+				r2PublicUrl,
+				postLog,
+			);
+
+			if (result.success) {
+				successCount++;
+				postLog.debug("Upload successful", { r2Url: result.r2Url });
+				updatedPosts.push({
+					...post,
+					image: result.r2Url!,
+				});
+			} else {
+				failureCount++;
+				postLog.error("Upload failed", {
+					title: post.title?.substring(0, 50),
+					error: result.error,
+				});
+				updatedPosts.push({
+					...post,
+					image: result.originalUrl,
+				});
+			}
+		}
+
+		// Add delay between batches (except for the last batch)
+		if (batchIndex < totalBatches - 1) {
+			log.info(`Batch ${batchIndex + 1} completed, waiting before next batch...`);
+			await sleep(batchConfigWithDefaults.batchDelayMs);
 		}
 	}
 

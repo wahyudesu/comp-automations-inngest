@@ -71,27 +71,36 @@ async function sendSingleCompetition(
   }
 
   // Send to all channel IDs
-  const sendPromises = waConfig.channelIds.map((chatId) =>
-    postLog.time(
-      `whatsapp-send-${comp.id}-${chatId}`,
-      async () =>
-        await fetch(`${waConfig.baseUrl}/api/sendImage`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            session: waConfig.sessionId,
-            chatId,
-            file: {
-              mimetype: "image/jpeg",
-              filename,
-              url: comp.poster,
-            },
-            reply_to: null,
-            caption,
-          }),
-        }),
-    ),
-  );
+  const sendPromises = waConfig.channelIds.map(async (chatId) => {
+    const payload = {
+      session: waConfig.sessionId,
+      chatId,
+      file: {
+        mimetype: "image/jpeg",
+        filename,
+        url: comp.poster,
+      },
+      reply_to: null,
+      caption,
+    };
+
+    const response = await fetch(`${waConfig.baseUrl}/api/sendImage`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const responseText = await response.text();
+      console.error(`[WhatsApp ERROR] ${comp.title}`);
+      console.error(`  URL: ${comp.poster}`);
+      console.error(`  Status: ${response.status} ${response.statusText}`);
+      console.error(`  Body: ${responseText}`);
+      throw new Error(`WhatsApp API error: ${response.status} ${response.statusText} - ${responseText}`);
+    }
+
+    return response;
+  });
 
   const responses = await Promise.allSettled(sendPromises);
 
@@ -101,15 +110,19 @@ async function sendSingleCompetition(
   );
 
   if (failedSends.length > 0) {
-    const errors = failedSends
-      .map((f, i) => {
+    const errorMessages = await Promise.all(
+      failedSends.map(async (f, i) => {
+        const channelId = waConfig.channelIds[i];
         if (f.status === "rejected") {
-          return `Channel ${waConfig.channelIds[i]}: ${f.reason}`;
+          console.error(`[WhatsApp ERROR] Channel ${channelId}:`, f.reason);
+          return `Channel ${channelId}: ${f.reason}`;
         }
-        return `Channel ${waConfig.channelIds[i]}: ${f.value.status}`;
-      })
-      .join("; ");
-    throw new Error(`Some WhatsApp sends failed: ${errors}`);
+        const body = await f.value.text();
+        console.error(`[WhatsApp ERROR] Channel ${channelId}: HTTP ${f.value.status} - ${body}`);
+        return `Channel ${channelId}: HTTP ${f.value.status} - ${body}`;
+      }),
+    );
+    throw new Error(`Some WhatsApp sends failed: ${errorMessages.join("; ")}`);
   }
 
   await postLog.time(`db-update-${comp.id}`, async () => {
