@@ -158,9 +158,9 @@ async function sendCompetitions(
 
   const waConfig: WhatsAppConfig = {
     baseUrl: WAHA_BASE_URL,
-    apiKey: env.WAHA_API_KEY,
+    apiKey: env.WAHA_API_KEY ?? "",
     sessionId: WA_SESSION,
-    channelId: WHATSAPP_CHANNEL_ID,
+    channelIds: [WHATSAPP_CHANNEL_ID],
   };
 
   if (!waConfig.apiKey) {

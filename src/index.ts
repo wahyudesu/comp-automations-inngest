@@ -2,28 +2,12 @@ import { Hono } from "hono";
 import { inngest, functions } from "./inngest/index.js";
 import { serve } from "inngest/hono";
 // Import workflow class for Cloudflare Workflows binding
-import { CompetitionAutomationWorkflow as WorkflowClass } from "./workflows/competition-workflow.js";
+import { CompetitionAutomationWorkflow, type Env } from "./workflows/competition-workflow.js";
 
 // Re-export for Cloudflare Workflows (named export required)
-export const CompetitionAutomationWorkflow = WorkflowClass;
+export { CompetitionAutomationWorkflow };
 
-type Bindings = {
-	DATABASE_URL: string;
-	R2_ACCESS_KEY_ID: string;
-	R2_SECRET_ACCESS_KEY: string;
-	R2_ENDPOINT: string;
-	R2_BUCKET: string;
-	R2_PUBLIC_URL: string;
-	WAHA_BASE_URL?: string;
-	WAHA_API_KEY: string;
-	WA_SESSION_ID?: string;
-	WHATSAPP_CHANNEL_ID?: string;
-	INNGEST_TRIGGER_URL?: string;
-	INNGEST_API_KEY?: string;
-	SCRAPING_SECRET_CODE?: string;
-};
-
-const app = new Hono<{ Bindings: Bindings }>();
+const app = new Hono<{ Bindings: Env }>();
 
 // Health check endpoint
 app.get("/", (c) => {
@@ -81,11 +65,41 @@ app.get("/api/trigger-scraping", async (c) => {
 		return c.json({ success: false, error: "Unauthorized: Invalid or missing code" }, 401);
 	}
 
-	// Import and run cron handler
-	const { handleCronScraping } = await import("./workers/cron-handler.js");
-	const result = await handleCronScraping(c.env);
+	// Trigger the workflow using the Workflows API
+	try {
+		const instance = await c.env.COMPETITION_WORKFLOW.create();
+		return c.json({
+			success: true,
+			message: "Competition workflow triggered",
+			instanceId: instance.id,
+		});
+	} catch (error) {
+		return c.json({
+			success: false,
+			error: error instanceof Error ? error.message : String(error),
+		}, 500);
+	}
+});
 
-	return c.json(result);
+// API endpoint: Check workflow status
+// Usage: GET /api/workflow-status?instanceId=INSTANCE_ID
+app.get("/api/workflow-status", async (c) => {
+	const { instanceId } = c.req.query();
+
+	if (!instanceId) {
+		return c.json({ success: false, error: "instanceId is required" }, 400);
+	}
+
+	try {
+		const instance = await c.env.COMPETITION_WORKFLOW.get(instanceId);
+		const status = await instance.status();
+		return c.json({ success: true, status });
+	} catch (error) {
+		return c.json({
+			success: false,
+			error: error instanceof Error ? error.message : String(error),
+		}, 500);
+	}
 });
 
 // Trigger endpoint: Called by CF Workers after scraping to start batch processing
@@ -160,30 +174,33 @@ export default {
 	fetch: app.fetch,
 
 	// Scheduled handler for cron triggers
-	scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
+	scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
 		const log = console;
 		log.info("Cron trigger received", {
 			scheduledTime: event.scheduledTime,
 			cron: event.cron,
 		});
 
-		// Run the CompetitionAutomationWorkflow in background
-		const workflow = new CompetitionAutomationWorkflow();
-		workflow.env = env;
-
-		// Run workflow and then trigger Inngest with waitUntil (non-blocking)
+		// Trigger the CompetitionAutomationWorkflow using Workflows API
 		ctx.waitUntil(
 			(async () => {
 				try {
-					const result = await workflow.run();
+					// Create a new workflow instance
+					const instance = await env.COMPETITION_WORKFLOW.create();
+					log.info("Workflow instance created", { instanceId: instance.id });
+
+					// Wait for the workflow to complete
+					const result = await instance.output;
+
+					log.info("Workflow completed", { result });
 
 					// Only trigger Inngest if workflow succeeded and has new records
-					if (result.success && result.newRecordIds.length > 0) {
+					if (result?.success && result.newRecordIds?.length > 0) {
 						log.info("Triggering Inngest batch processing", {
 							recordCount: result.newRecordIds.length,
 						});
 
-						// Use waitUntil for inngest.send to prevent blocking
+						// Trigger Inngest in the background (don't block)
 						ctx.waitUntil(
 							inngest
 								.send({
