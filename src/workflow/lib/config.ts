@@ -9,7 +9,7 @@ const IG_LOMBA = [
   "infolombaeventid", // ok
   // "infolomba",
   "infolombamahasiswa.id",
-  "infolombaevent.id", //ok
+  // "infolombaevent.id", //ok
   "pusatinfolomba", //ok
   // "lombasmpupdate",
   // "lombasma"
@@ -104,7 +104,7 @@ export function createConfig(
     return (value ?? defaultValue) as string;
   };
 
-  const RETRY_DELAY_MINUTES = 5;
+  const RETRY_DELAY_MINUTES = 10;
   const MS_PER_MINUTE = 60 * 1000;
 
   return {

@@ -16,8 +16,8 @@ function randomDelay(minMs: number, maxMs: number): Promise<void> {
 /** Maximum retry attempts per account */
 const MAX_RETRY_PER_ACCOUNT = 3;
 
-/** Delay between retries (5 minutes) */
-const RETRY_DELAY_MS = 5 * 60 * 1000;
+/** Delay between retries (10 minutes) */
+const RETRY_DELAY_MS = 10 * 60 * 1000;
 
 /** Error codes that should trigger a retry with delay */
 const RETRYABLE_ERROR_CODES = ["429", "429_TOO_MANY_REQUESTS", "RATE_LIMITED"];
