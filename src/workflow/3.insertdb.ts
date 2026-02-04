@@ -45,9 +45,14 @@ export async function insertToDb(
 			WHERE urlsource IS NOT NULL OR description IS NOT NULL
 		`;
 
-		const existingUrls = new Set(existingData.map((r) => r.urlsource).filter(Boolean));
+		const existingUrls = new Set(
+			existingData.map((r) => r.urlsource).filter((u): u is string => typeof u === "string"),
+		);
 		const existingDescriptions = new Set(
-			existingData.map((r) => r.description).filter(Boolean).map((d) => d.trim()),
+			existingData
+				.map((r) => r.description)
+				.filter((d): d is string => typeof d === "string" && d.trim() !== "")
+				.map((d) => d.trim()),
 		);
 
 		log.debug("Existing data in DB", {
@@ -65,8 +70,9 @@ export async function insertToDb(
 		};
 
 		for (const post of posts) {
-			const urlsource = post.link ?? "";
-			const description = (post.description ?? "").trim();
+			const urlsource = typeof post.link === "string" ? post.link : "";
+			const description =
+				typeof post.description === "string" ? post.description.trim() : "";
 
 			if (urlsource && existingUrls.has(urlsource)) {
 				skipped.skippedUrl++;
@@ -109,10 +115,10 @@ export async function insertToDb(
 
 		// Use batch INSERT to reduce subrequest count (single query instead of N queries)
 		const insertValues = filteredPosts.map((post) => [
-			post.title ?? "",
-			post.description ?? "",
-			post.image ?? "",
-			post.link ?? "",
+			typeof post.title === "string" ? post.title : "",
+			typeof post.description === "string" ? post.description : "",
+			typeof post.image === "string" ? post.image : "",
+			typeof post.link === "string" ? post.link : "",
 			"draft",
 		]);
 

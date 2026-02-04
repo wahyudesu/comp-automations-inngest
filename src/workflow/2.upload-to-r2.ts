@@ -146,12 +146,12 @@ async function uploadSingleImage(
 			});
 
 			// Step 2: Upload to R2 using native binding (does NOT count as subrequest)
-			const sanitizedTitle = post.title
-				? post.title
-						.replace(/[^a-z0-9]/gi, "_")
-						.toLowerCase()
-						.slice(0, 50)
-				: post.username ?? "instagram";
+			const sanitizedTitle =
+				typeof post.title === "string" && post.title
+					? post.title.replace(/[^a-z0-9]/gi, "_").toLowerCase().slice(0, 50)
+					: typeof post.username === "string"
+						? post.username
+						: "instagram";
 			const filename = `${Date.now()}-${sanitizedTitle}.jpg`;
 
 			await attemptLog.time(`upload-to-r2-${attempt}`, async () => {
@@ -282,7 +282,7 @@ export async function uploadToR2(
 			postLog.debug("Processing post", {
 				index: globalIndex + 1,
 				total: posts.length,
-				title: post.title?.substring(0, 50),
+				title: typeof post.title === "string" ? post.title.substring(0, 50) : undefined,
 			});
 
 			const result = await uploadSingleImage(
@@ -303,7 +303,7 @@ export async function uploadToR2(
 			} else {
 				failureCount++;
 				postLog.error("Upload failed", {
-					title: post.title?.substring(0, 50),
+					title: typeof post.title === "string" ? post.title.substring(0, 50) : post.title,
 					error: result.error,
 				});
 				updatedPosts.push({

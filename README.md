@@ -78,3 +78,19 @@ schema fix + proses ekstraksi = cron wa channel
   Data dari scraping (dengan title yang mungkin null    
   atau dari web) disimpan ke tabel competitions dengan  
   status 'draft'.  bv 
+
+
+postgresql://postgres.znmkybliodrrbzynexyl:wahyuikbal7A@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres
+
+postgresql://postgres.znmkybliodrrbzynexyl:wahyuikbal7A@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
+
+postgresql://postgres:wahyuikbal7A@db.znmkybliodrrbzynexyl.supabase.co:5432/postgres
+
+postgresql://postgres.znmkybliodrrbzynexyl:wahyuikbal7A@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres
+
+
+oiya aku izin gaikut yah sampe seterusnya, udh ada agnes yg handle content tech, ikut klo ada kperluan aja
+
+my responsibility as leader is makesure my vice and asso can grow in techfusion, better than any divission
+
+klo divisi yg lain ada kurang bisa dibantu yah, sama kek gw bantu bantu researcher lain, community, competition
