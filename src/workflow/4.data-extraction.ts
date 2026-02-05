@@ -53,14 +53,25 @@ function normalize(data: any) {
       .map((p: any) => {
         if (typeof p === "number") return p;
         if (typeof p === "string") return parseRupiah(p);
-        if (typeof p === "object" && p.amount) return parseRupiah(p.amount);
+        // Handle nested object with amount property
+        if (typeof p === "object" && p !== null && p.amount !== undefined) {
+          // Only pass to parseRupiah if amount is string or number
+          if (typeof p.amount === "number" || typeof p.amount === "string") {
+            return parseRupiah(p.amount);
+          }
+        }
         return null;
       })
       .filter((p: number | null) => p !== null);
     cleaned.pricing = prices.length > 0 ? prices : null;
-  } else if (data.pricing?.amount) {
-    const num = parseRupiah(data.pricing.amount);
-    cleaned.pricing = num !== null ? [num] : null;
+  } else if (typeof data.pricing === "object" && data.pricing !== null && data.pricing.amount !== undefined) {
+    // Only pass to parseRupiah if amount is string or number
+    if (typeof data.pricing.amount === "number" || typeof data.pricing.amount === "string") {
+      const num = parseRupiah(data.pricing.amount);
+      cleaned.pricing = num !== null ? [num] : null;
+    } else {
+      cleaned.pricing = null;
+    }
   } else {
     cleaned.pricing = null;
   }
@@ -181,8 +192,13 @@ function normalize(data: any) {
 }
 
 // Helper: Parse "Rp 50.000" or "50000" to number
-function parseRupiah(value: string | number): number | null {
-  if (typeof value === "number") return value;
+function parseRupiah(value: string | number | any): number | null {
+  if (typeof value === "number") {
+    // Handle NaN and Infinity
+    if (!isFinite(value)) return null;
+    return value;
+  }
+  // Handle objects, arrays, and other non-string types
   if (!value || typeof value !== "string") return null;
 
   const cleaned = value.replace(/[^\d]/g, "");
@@ -808,9 +824,9 @@ export async function extractData(
     log.fatal("Fatal error in extraction", error as Error);
     throw error;
   } finally {
-    // Gracefully close connection - ignore errors during cleanup
+    // Gracefully close connection - use longer timeout to avoid PromiseFulfiller errors
     try {
-      await sql.end({ timeout: 1 });
+      await sql.end({ timeout: 5 });
     } catch {
       // Ignore cleanup errors
     }

@@ -52,7 +52,9 @@ async function sendSingleCompetition(
       : "";
 
   const deadline = comp.endDate ? formatDeadline(comp.endDate) : "";
-  const filename = comp.poster.split("/").pop() ?? "image.jpg";
+  const filename = (comp.poster && typeof comp.poster === "string")
+    ? comp.poster.split("/").pop() ?? "image.jpg"
+    : "image.jpg";
   const caption = buildCaption(comp, level, deadline);
 
   postLog.debug("Sending to WhatsApp API", {

@@ -41,6 +41,10 @@ export type Env = {
 	INNGEST_TRIGGER_URL?: string;
 	INNGEST_API_KEY?: string;
 	SCRAPING_SECRET_CODE?: string;
+	COMPETITION_WORKFLOW: {
+		create: () => Promise<{ id: string; output: any }>;
+		get: (id: string) => Promise<{ status: () => Promise<string> }>;
+	};
 };
 
 export interface ScrapedPost {

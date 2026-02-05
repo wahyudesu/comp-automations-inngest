@@ -79,6 +79,10 @@ schema fix + proses ekstraksi = cron wa channel
   atau dari web) disimpan ke tabel competitions dengan  
   status 'draft'.  bv 
 
+✘ [ERROR] Uncaught TypeError: str.replace is not a function 
+
+✘ [ERROR] e = kj/async.c++:3145: failed: PromiseFulfiller was destroyed without fulfilling the promise.
+
 
 postgresql://postgres.znmkybliodrrbzynexyl:wahyuikbal7A@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres
 
