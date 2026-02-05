@@ -113,26 +113,30 @@ export async function insertToDb(
 
 		log.startTimer("db-insert-total");
 
-		// Use batch INSERT to reduce subrequest count (single query instead of N queries)
-		const insertValues = filteredPosts.map((post) => [
-			typeof post.title === "string" ? post.title : "",
-			typeof post.description === "string" ? post.description : "",
-			typeof post.image === "string" ? post.image : "",
-			typeof post.link === "string" ? post.link : "",
-			"draft",
-		]);
-
+		// Use individual INSERTs for now - simpler and more reliable
+		// TODO: Can optimize to true bulk insert later if needed
 		const result = await log.time(`db-insert-batch`, async () => {
-			return await sql`
-				INSERT INTO competitions (
-					title,
-					description,
-					poster,
-					urlsource,
-					status
-				) SELECT * FROM ${sql(insertValues)}
-				RETURNING id
-			`;
+			const inserted: Array<{ id: number }> = [];
+			for (const post of filteredPosts) {
+				const row = await sql`
+					INSERT INTO competitions (
+						title,
+						description,
+						poster,
+						urlsource,
+						status
+					) VALUES (
+						${String(post.title ?? "")},
+						${String(post.description ?? "")},
+						${String(post.image ?? "")},
+						${String(post.link ?? "")},
+						'draft'
+					)
+					RETURNING id
+				`;
+				inserted.push(...row);
+			}
+			return inserted;
 		});
 
 		const newRecordIds = result.map((r) => r.id);
