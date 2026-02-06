@@ -1,23 +1,18 @@
 import { load } from "cheerio";
 import { createLogger } from "../utils/logger.js";
-import type { ScrapeResult } from "./lib/types.js";
+import type { ScrapeResult, ScrapedPost, ScrapeError } from "./lib/types.js";
+import { config } from "./lib/config.js";
 
-const logger = createLogger({ workflowStep: "1-web-scrape" });
+const logger = createLogger({ workflowStep: "1-web-scrape-infolombait" });
 
 const TARGET_URL = "https://www.infolombait.com/" as const;
-const IMAGE_LIMIT = 5;
+const IMAGE_LIMIT = config.webScraping.sources.find(s => s.name === "infolombait")?.imageLimit ?? 5;
 
 interface ScraperPost {
 	title: string;
 	link: string;
 	image?: string;
 	description?: string;
-}
-
-interface ScraperResult {
-	count: number;
-	images: string[];
-	posts: ScraperPost[];
 }
 
 /** Normalize Blogger image URL to higher resolution */
@@ -59,10 +54,12 @@ async function fetchPostDescription(link: string): Promise<string> {
 	}
 }
 
-export const name = "lombait";
+export const name = "infolombait";
 
-export async function scrape(): Promise<ScraperResult> {
+export async function scrape(): Promise<ScrapeResult> {
 	try {
+		logger.info("Starting web scrape for infolombait.com");
+
 		const response = await fetch(TARGET_URL, {
 			headers: { "User-Agent": "Mozilla/5.0" },
 		});
@@ -125,19 +122,37 @@ export async function scrape(): Promise<ScraperResult> {
 			}),
 		);
 
+		// Transform to ScrapedPost format
+		const scrapedPosts: ScrapedPost[] = posts.map((post) => ({
+			title: post.title || null,
+			link: post.link,
+			image: post.image || "",
+			description: post.description || "",
+			source: "web" as const,
+			username: "infolombait",
+		}));
+
 		logger.info(`Web scraping completed: ${posts.length} posts fetched`, {
 			count: posts.length,
+			posts: posts.map((p) => ({ title: p.title, link: p.link })),
 		});
 
 		return {
-			count: posts.length,
-			images: imagesArr,
-			posts,
+			count: scrapedPosts.length,
+			posts: scrapedPosts,
 		};
 	} catch (error) {
+		const scrapeError: ScrapeError = {
+			username: "infolombait",
+			error: error instanceof Error ? error.message : String(error),
+		};
 		logger.error("Web scraping failed", {
-			message: error instanceof Error ? error.message : String(error),
+			message: scrapeError.error,
 		});
-		throw error;
+		return {
+			count: 0,
+			posts: [],
+			errors: [scrapeError],
+		};
 	}
 }

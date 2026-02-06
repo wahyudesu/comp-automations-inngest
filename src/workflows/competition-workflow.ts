@@ -1,6 +1,6 @@
 import { WorkflowEntrypoint, WorkflowStep } from "cloudflare:workers";
 import type { WorkflowEvent } from "cloudflare:workers";
-import { scrape as igScrape } from "../workflow/1.ig-scrape.js";
+import { scrapeAllSources } from "../workflow/1.parallel-scrape.js";
 import { uploadToR2 } from "../workflow/2.upload-to-r2.js";
 import { insertToDb } from "../workflow/3.insertdb.js";
 import {
@@ -15,7 +15,7 @@ import {
  *
  * Using proper Workflows API with step.do() so each step gets its own subrequest limit.
  *
- * Flow: IG Scraping → Upload to R2 → Insert to DB
+ * Flow: Parallel Scraping (IG + web sources) → Upload to R2 → Insert to DB
  * Then the scheduled handler triggers Inngest for batch processing.
  */
 
@@ -80,21 +80,21 @@ export class CompetitionAutomationWorkflow extends WorkflowEntrypoint<
 		log.info("[ai] Starting Competition Automation Workflow");
 
 		try {
-			// Step 1: Scrape Instagram (each step.do gets its own subrequest limit)
+			// Step 1: Scrape all sources in parallel (IG + web)
 			const scrapeResult = await step.do(
-				"scrape-instagram",
+				"scrape-all-sources",
 				{
 					retries: {
 						limit: 2,
 						delay: "30 seconds",
 						backoff: "exponential",
 					},
-					timeout: "15 minutes",
+					timeout: "20 minutes",
 				},
 				async () => {
-					log.info("Workflow Step 1: Instagram scraping started");
-					const result = await igScrape(log);
-					log.info(`Workflow Step 1: Instagram scraping completed ${result.count}`);
+					log.info("Workflow Step 1: Parallel scraping started");
+					const result = await scrapeAllSources(log);
+					log.info(`Workflow Step 1: Parallel scraping completed ${result.count} posts`);
 					return result;
 				},
 			);

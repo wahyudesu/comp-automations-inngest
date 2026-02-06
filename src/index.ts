@@ -157,80 +157,73 @@ app.on(["GET", "PUT", "POST"], "/api/inngest",
 	})
 );
 
-// Scheduled handler for Cron Triggers
-// This is called by Cloudflare Workers when the cron schedule is triggered
-export interface ScheduledEvent {
-	scheduledTime: number;
-	cron: string;
-}
-
-export interface ExecutionContext {
-	waitUntil(promise: Promise<unknown>): void;
-}
-
 // Export untuk Cloudflare Workers
 export default {
 	// Hono app for HTTP requests
 	fetch: app.fetch,
 
-	// Scheduled handler for cron triggers
-	scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+	// Scheduled handler for cron triggers - runs parallel pipelines
+	async scheduled(
+		event: { scheduledTime: number; cron: string },
+		env: Env,
+		ctx: { waitUntil: (promise: Promise<unknown>) => void },
+	) {
 		const log = console;
-		log.info("Cron trigger received", {
+		log.info("Cron trigger received - starting parallel pipelines", {
 			scheduledTime: event.scheduledTime,
 			cron: event.cron,
 		});
 
-		// Trigger the CompetitionAutomationWorkflow using Workflows API
-		ctx.waitUntil(
-			(async () => {
-				try {
-					// Create a new workflow instance
-					const instance = await env.COMPETITION_WORKFLOW.create();
-					log.info("Workflow instance created", { instanceId: instance.id });
+		// Run the pipeline directly (not in waitUntil for proper error handling)
+		try {
+			const { runParallelPipelines } = await import("./workflow/1.parallel-scrape.js");
 
-					// Wait for the workflow to complete
-					const result = await instance.output;
+			log.info("Running parallel pipelines (IG + Web)...");
 
-					log.info("Workflow completed", { result });
+			const pipelineResult = await runParallelPipelines(env);
 
-					// Only trigger Inngest if workflow succeeded and has new records
-					if (result?.success && result.newRecordIds?.length > 0) {
-						log.info("Triggering Inngest batch processing", {
-							recordCount: result.newRecordIds.length,
-						});
+			log.info("Parallel pipelines completed", {
+				totalScraped: pipelineResult.totalScraped,
+				totalInserted: pipelineResult.totalInserted,
+				newRecordIdsCount: pipelineResult.totalNewRecordIds.length,
+			});
 
-						// Trigger Inngest in the background (don't block)
-						ctx.waitUntil(
-							inngest
-								.send({
-									name: "process/batches.start",
-									data: {
-										recordIds: result.newRecordIds,
-										source: "instagram",
-										env: {
-											DATABASE_URL: env.DATABASE_URL,
-											R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID,
-											R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY,
-											R2_ENDPOINT: env.R2_ENDPOINT,
-											R2_BUCKET: env.R2_BUCKET,
-											R2_PUBLIC_URL: env.R2_PUBLIC_URL,
-											WAHA_BASE_URL: env.WAHA_BASE_URL,
-											WAHA_API_KEY: env.WAHA_API_KEY,
-											WA_SESSION_ID: env.WA_SESSION_ID,
-											WHATSAPP_CHANNEL_ID: env.WHATSAPP_CHANNEL_ID,
-										},
-									},
-								})
-								.catch((error) => {
-									log.error("Failed to send event to Inngest", { error });
-								})
-						);
-					}
-				} catch (error) {
-					log.error("Workflow failed", { error });
-				}
-			})()
-		);
+			// Only trigger Inngest if we have new records
+			if (pipelineResult.totalNewRecordIds.length > 0) {
+				log.info("Triggering Inngest batch processing", {
+					recordCount: pipelineResult.totalNewRecordIds.length,
+				});
+
+				// Trigger Inngest in background (don't block scheduled handler)
+				ctx.waitUntil(
+					inngest
+						.send({
+							name: "process/batches.start",
+							data: {
+								recordIds: pipelineResult.totalNewRecordIds,
+								source: "parallel-scrape",
+								env: {
+									DATABASE_URL: env.DATABASE_URL,
+									R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID,
+									R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY,
+									R2_ENDPOINT: env.R2_ENDPOINT,
+									R2_BUCKET: env.R2_BUCKET,
+									R2_PUBLIC_URL: env.R2_PUBLIC_URL,
+									WAHA_BASE_URL: env.WAHA_BASE_URL,
+									WAHA_API_KEY: env.WAHA_API_KEY,
+									WA_SESSION_ID: env.WA_SESSION_ID,
+									WHATSAPP_CHANNEL_ID: env.WHATSAPP_CHANNEL_ID,
+								},
+							},
+						})
+						.then(() => log.info("Inngest triggered successfully"))
+						.catch((error) => log.error("Failed to trigger Inngest", { error })),
+				);
+			} else {
+				log.info("No new records, skipping Inngest trigger");
+			}
+		} catch (error) {
+			log.error("Parallel pipelines failed", { error });
+		}
 	},
 };

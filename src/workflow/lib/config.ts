@@ -35,6 +35,19 @@ export interface InstagramConfig {
   retryDelayMs: number;
 }
 
+/** Web scraping source configuration */
+export interface WebScrapingSource {
+  name: string;
+  url: string;
+  imageLimit: number;
+}
+
+/** Web scraping configuration */
+export interface WebScrapingConfig {
+  enabled: boolean;
+  sources: WebScrapingSource[];
+}
+
 /** R2 storage configuration */
 export interface R2Config {
   endpoint: string;
@@ -63,6 +76,7 @@ export interface DbConfig {
 /** Application configuration */
 export interface AppConfig {
   instagram: InstagramConfig;
+  webScraping: WebScrapingConfig;
   r2: R2Config;
   whatsapp: WhatsAppConfig;
   db: DbConfig;
@@ -118,6 +132,21 @@ export function createConfig(
       rateLimitPerMinute: 20,
       retryDelayMs: RETRY_DELAY_MINUTES * MS_PER_MINUTE,
     },
+    webScraping: {
+      enabled: true,
+      sources: [
+        {
+          name: "infolombaid",
+          url: "https://infolomba.id/",
+          imageLimit: 5,
+        },
+        {
+          name: "infolombait",
+          url: "https://www.infolombait.com/",
+          imageLimit: 5,
+        },
+      ],
+    },
     r2: {
       endpoint: getEnv(
         "R2_ENDPOINT",
@@ -144,7 +173,7 @@ export function createConfig(
     },
     db: {
       ssl: "require",
-      max: 1,
+      max: 10, // Increased for parallel pipelines
     },
   };
 }

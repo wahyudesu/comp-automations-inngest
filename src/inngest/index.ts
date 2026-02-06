@@ -81,7 +81,7 @@ export const processDraftBatchesFn = inngest.createFunction(
     // Process each batch SEQUENTIALLY to avoid CPU timeout
     const batchResults: any[] = [];
     for (let index = 0; index < batches.length; index++) {
-      const batchIds = batches[index];
+      const batchIds = batches[index] as number[];
       const result = await step.run(`process-batch-${index + 1}`, async () => {
         // Extract AI data for this batch using specific record IDs
         // Pass 0 for newCount since we want specific existing records, not newest ones
@@ -184,6 +184,7 @@ export const processDraftBatchesFn = inngest.createFunction(
  */
 export const dummyEnv = {
   DATABASE_URL: process.env.DATABASE_URL ?? "",
+  MY_BUCKET: {} as R2Bucket, // Mock R2 bucket for local testing
   R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID ?? "",
   R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY ?? "",
   R2_ENDPOINT:

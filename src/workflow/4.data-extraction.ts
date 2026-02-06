@@ -826,7 +826,7 @@ export async function extractData(
   } finally {
     // Gracefully close connection - use longer timeout to avoid PromiseFulfiller errors
     try {
-      await sql.end({ timeout: 5 });
+      await sql.end({ timeout: 10 });
     } catch {
       // Ignore cleanup errors
     }

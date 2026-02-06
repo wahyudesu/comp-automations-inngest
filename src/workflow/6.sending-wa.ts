@@ -223,7 +223,11 @@ async function sendCompetitions(
     });
     throw error;
   } finally {
-    await sql.end();
+    try {
+      await sql.end({ timeout: 10 });
+    } catch {
+      // Ignore cleanup errors
+    }
   }
 }
 
@@ -241,6 +245,71 @@ async function fetchDraftCompetitions(
 			AND ("endDate" IS NULL OR "endDate" >= CURRENT_DATE)
 		ORDER BY id ASC
 	`;
+}
+
+/** Detailed skip reasons for logging */
+interface SkipReasons {
+  alreadySent: number;
+  noTitle: number;
+  noPoster: number;
+  expired: number;
+  eligible: number;
+}
+
+/**
+ * Analyze why competitions are being skipped from WhatsApp send.
+ * Returns detailed counts of records in each category.
+ */
+async function analyzeSkipReasons(
+  sql: ReturnType<typeof postgres>,
+): Promise<SkipReasons> {
+  const [alreadySent, noTitle, noPoster, expired, eligible] = await Promise.all([
+    // Already sent to WhatsApp
+    sql<{ count: bigint }[]>`
+      SELECT COUNT(*)::bigint as count
+      FROM competitions
+      WHERE "whatsappChannel" = true
+    `.then((r) => Number(r[0]?.count ?? 0)),
+
+    // No title or empty title
+    sql<{ count: bigint }[]>`
+      SELECT COUNT(*)::bigint as count
+      FROM competitions
+      WHERE ("whatsappChannel" = false OR "whatsappChannel" IS NULL)
+        AND (title IS NULL OR title = '')
+    `.then((r) => Number(r[0]?.count ?? 0)),
+
+    // No poster or empty poster
+    sql<{ count: bigint }[]>`
+      SELECT COUNT(*)::bigint as count
+      FROM competitions
+      WHERE ("whatsappChannel" = false OR "whatsappChannel" IS NULL)
+        AND (poster IS NULL OR poster = '')
+    `.then((r) => Number(r[0]?.count ?? 0)),
+
+    // Expired (endDate < today)
+    sql<{ count: bigint }[]>`
+      SELECT COUNT(*)::bigint as count
+      FROM competitions
+      WHERE ("whatsappChannel" = false OR "whatsappChannel" IS NULL)
+        AND "endDate" IS NOT NULL
+        AND "endDate" < CURRENT_DATE
+    `.then((r) => Number(r[0]?.count ?? 0)),
+
+    // Eligible to send
+    sql<{ count: bigint }[]>`
+      SELECT COUNT(*)::bigint as count
+      FROM competitions
+      WHERE ("whatsappChannel" = false OR "whatsappChannel" IS NULL)
+        AND title IS NOT NULL
+        AND title != ''
+        AND poster IS NOT NULL
+        AND poster != ''
+        AND ("endDate" IS NULL OR "endDate" >= CURRENT_DATE)
+    `.then((r) => Number(r[0]?.count ?? 0)),
+  ]);
+
+  return { alreadySent, noTitle, noPoster, expired, eligible };
 }
 
 /**
@@ -268,22 +337,48 @@ export async function sendAllToWhatsApp(
   });
 
   try {
-    log.info(
-      "Fetching competitions with whatsappChannel = false from database",
+    // Analyze skip reasons before fetching
+    const skipReasons = await log.time("db-analyze-skips", async () =>
+      analyzeSkipReasons(sql),
     );
 
+    // Log detailed skip analysis
+    log.info("WhatsApp send eligibility analysis", {
+      alreadySent: skipReasons.alreadySent,
+      noTitle: skipReasons.noTitle,
+      noPoster: skipReasons.noPoster,
+      expired: skipReasons.expired,
+      eligible: skipReasons.eligible,
+      totalPending: skipReasons.noTitle + skipReasons.noPoster + skipReasons.expired + skipReasons.eligible,
+    });
+
+    // Show warning if there are skipped records
+    const totalSkipped = skipReasons.noTitle + skipReasons.noPoster + skipReasons.expired;
+    if (totalSkipped > 0) {
+      log.warn("⚠️ Some competitions are being skipped from WhatsApp send", {
+        skipReasons: {
+          alreadySent: `${skipReasons.alreadySent} already sent`,
+          noTitle: `${skipReasons.noTitle} missing title (AI extraction failed)`,
+          noPoster: `${skipReasons.noPoster} missing poster (R2 upload failed)`,
+          expired: `${skipReasons.expired} past deadline`,
+        },
+        eligible: `${skipReasons.eligible} ready to send`,
+      });
+    }
+
+    // Fetch eligible competitions
     const comps = await log.time("db-fetch-all", async () =>
       fetchDraftCompetitions(sql),
     );
 
     if (!comps.length) {
       log.warn(
-        "No competitions to send (whatsappChannel = false with title + poster)",
+        "No eligible competitions to send (all are either sent, missing data, or expired)",
       );
       return { sent: 0, skipped: 0 };
     }
 
-    log.info("Found competitions to send", { count: comps.length });
+    log.info("Found eligible competitions to send", { count: comps.length });
 
     await sql.end();
 
@@ -325,6 +420,20 @@ export async function sendRandomToWhatsApp(
   });
 
   try {
+    // Analyze skip reasons before fetching
+    const skipReasons = await log.time("db-analyze-skips", async () =>
+      analyzeSkipReasons(sql),
+    );
+
+    // Log detailed skip analysis
+    log.info("WhatsApp send eligibility analysis", {
+      alreadySent: skipReasons.alreadySent,
+      noTitle: skipReasons.noTitle,
+      noPoster: skipReasons.noPoster,
+      expired: skipReasons.expired,
+      eligible: skipReasons.eligible,
+    });
+
     log.info(
       "Fetching competitions with whatsappChannel = false from database for random selection",
     );
@@ -335,7 +444,7 @@ export async function sendRandomToWhatsApp(
 
     if (!comps.length) {
       log.warn(
-        "No competitions to send (whatsappChannel = false with title + poster)",
+        "No eligible competitions to send (all are either sent, missing data, or expired)",
       );
       return { sent: 0, skipped: 0 };
     }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { scrape } from "../1.web-scrape.js";
+import { scrape } from "../1.web-scrape-infolombait.js";
 
 describe("Web Scrape - Infolombait", () => {
 	it("should successfully scrape infolombait.com", async () => {
@@ -7,7 +7,6 @@ describe("Web Scrape - Infolombait", () => {
 
 		expect(result).toBeDefined();
 		expect(result.count).toBeGreaterThan(0);
-		expect(result.images).toBeArray();
 		expect(result.posts).toBeArray();
 	});
 
@@ -21,13 +20,15 @@ describe("Web Scrape - Infolombait", () => {
 		expect(firstPost.title).toBeString();
 		expect(firstPost.link).toBeString();
 		expect(firstPost.link).toStartWith("http");
+		expect(firstPost.source).toBe("web");
+		expect(firstPost.username).toBe("infolombait");
 	});
 
 	it("should have images matching posts count", async () => {
 		const result = await scrape();
 
-		expect(result.images.length).toBeGreaterThan(0);
-		expect(result.images.length).toBeLessThanOrEqual(5);
+		expect(result.posts.length).toBeGreaterThan(0);
+		expect(result.posts.length).toBeLessThanOrEqual(5);
 	});
 
 	it("should fetch descriptions for posts", async () => {
@@ -40,9 +41,9 @@ describe("Web Scrape - Infolombait", () => {
 	it("should have normalized image URLs", async () => {
 		const result = await scrape();
 
-		result.images.forEach((img) => {
-			expect(img).toStartWith("http");
-			expect(img).toContain("/s1600/");
+		result.posts.forEach((post) => {
+			expect(post.image).toStartWith("http");
+			expect(post.image).toContain("/s1600/");
 		});
 	});
 });

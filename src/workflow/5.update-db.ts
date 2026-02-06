@@ -101,6 +101,10 @@ export async function saveToDb(
 		});
 		throw error;
 	} finally {
-		await sql.end();
+		try {
+			await sql.end({ timeout: 10 });
+		} catch {
+			// Ignore cleanup errors
+		}
 	}
 }

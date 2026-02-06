@@ -134,7 +134,7 @@ export async function insertToDb(
 					)
 					RETURNING id
 				`;
-				inserted.push(...row);
+				inserted.push(...(row as unknown as Array<{ id: number }>));
 			}
 			return inserted;
 		});
@@ -164,6 +164,11 @@ export async function insertToDb(
 		});
 		throw error;
 	} finally {
-		await sql.end();
+		// Gracefully close connection with longer timeout to avoid PromiseFulfiller errors
+		try {
+			await sql.end({ timeout: 10 });
+		} catch {
+			// Ignore cleanup errors
+		}
 	}
 }

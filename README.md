@@ -79,10 +79,6 @@ schema fix + proses ekstraksi = cron wa channel
   atau dari web) disimpan ke tabel competitions dengan  
   status 'draft'.  bv 
 
-✘ [ERROR] Uncaught TypeError: str.replace is not a function 
-
-✘ [ERROR] e = kj/async.c++:3145: failed: PromiseFulfiller was destroyed without fulfilling the promise.
-
 
 postgresql://postgres.znmkybliodrrbzynexyl:wahyuikbal7A@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres
 
@@ -98,3 +94,13 @@ oiya aku izin gaikut yah sampe seterusnya, udh ada agnes yg handle content tech,
 my responsibility as leader is makesure my vice and asso can grow in techfusion, better than any divission
 
 klo divisi yg lain ada kurang bisa dibantu yah, sama kek gw bantu bantu researcher lain, community, competition
+
+
+untuk web scrape info lomba it ini bisa diconfig/atur jumlah lomba yanga bakal di scrape untuk cron di web infoflomba it itu ada 5 aja deh, dan infolombaid ada 5 juga dan dari 5 itu terapkan mekanisme yang kurang lebih sama dengan ig scrape bahwa jika lomban ya udah ada di database maka di skip aja
+
+
+coba hilangin file file yg ndaka perlu dan buatkan saya code yang lebih bmudah di devlopment jadi gak yg clean clean amad
+
+coba cek terlebihd ahlu untuk alur dari cloudflare workflow ini apakah udah bnar, berikan kritik saran mu
+
+apa perbedaan dari ig scrape dan web scrape dari jenis datanya, karena harapanku harus sama, yaitu ada title, ada poster dan descriptiton, dan dari hasi lkeuanya diganti link ganmbarn ya dan diupaldo ke r2 dan disimpan ke db

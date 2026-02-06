@@ -16,8 +16,8 @@ function randomDelay(minMs: number, maxMs: number): Promise<void> {
 /** Maximum retry attempts per account */
 const MAX_RETRY_PER_ACCOUNT = 3;
 
-/** Delay between retries (10 minutes) */
-const RETRY_DELAY_MS = 10 * 60 * 1000;
+/** Delay between retries (30 seconds for dev, 10 minutes for prod) */
+const RETRY_DELAY_MS = process.env.NODE_ENV === "production" ? 10 * 60 * 1000 : 30 * 1000;
 
 /** Error codes that should trigger a retry with delay */
 const RETRYABLE_ERROR_CODES = ["429", "429_TOO_MANY_REQUESTS", "RATE_LIMITED"];
@@ -120,8 +120,10 @@ async function scrapeOnce(
 		}
 	}
 
-	// Pass 2: Retry akun yang gagal (tunggu 5 menit SEKALI untuk semua)
-	if (failedAccounts.length > 0) {
+	// Pass 2: Retry akun yang gagal (tunggu delay SEKALI untuk semua)
+	// Skip in Workers environment to avoid timeout
+	const skipPass2 = process.env.CF_WORKERS || process.env.NODE_ENV === "production";
+	if (failedAccounts.length > 0 && !skipPass2) {
 		log.info(`Pass 2: Retrying ${failedAccounts.length} failed accounts after ${RETRY_DELAY_MS / 60000} min delay`);
 		await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
 
@@ -175,6 +177,10 @@ async function scrapeOnce(
 				accountLog.error(`Exception on retry: ${errorMsg}`, { username, errorCode });
 			}
 		}
+	} else if (failedAccounts.length > 0 && skipPass2) {
+		log.info(`Pass 2: Skipped ${failedAccounts.length} failed accounts (Workers/Production mode)`, {
+			failedAccounts: failedAccounts.map(f => f.username),
+		});
 	}
 
 	const totalTime = log.endTimer("instagram-scrape-total");

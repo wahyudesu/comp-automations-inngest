@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Competition automation system built on Cloudflare Workers with Inngest batch processing. Scrapes competition announcements from Instagram, extracts structured data using AI models, stores in a PostgreSQL database, and posts to WhatsApp channels.
+Competition automation system built on Cloudflare Workers with Inngest batch processing. Scrapes competition announcements from **multiple sources** (Instagram + web), extracts structured data using AI models, stores in a PostgreSQL database, and posts to WhatsApp channels.
 
 **Runtime:** Uses Bun as package manager and runtime (`bun install`, `bun run ...`).
 
@@ -36,25 +36,40 @@ bun install           # Install packages (uses bun.lock)
 ### Application Structure
 
 - **src/index.ts**: Hono app entry point. Serves Inngest handler at `/api/inngest` and manual trigger at `/api/trigger-scraping`
-- **src/workflows/competition-workflow.ts**: Cloudflare Workers Workflow (cron-based) for IG→R2→DB pipeline
+- **src/workflows/competition-workflow.ts**: Cloudflare Workers Workflow (cron-based) for parallel scraping → R2 → DB pipeline
 - **src/workers/cron-handler.ts**: Alternative cron handler implementation
 - **src/inngest/index.ts**: Defines `processDraftBatchesFn` for AI extraction + WhatsApp sending
-- **src/workflow/\*.ts**: Individual workflow step functions
+- **src/workflow/1.parallel-scrape.ts**: **Parallel scraper** that runs all scrapers (IG + web) simultaneously
+- **src/workflow/1.ig-scrape.ts**: Instagram scraper using `@aduptive/instagram-scraper`
+- **src/workflow/1.web-scrape-infolombaid.ts**: Web scraper for infolomba.id
+- **src/workflow/1.web-scrape-infolombait.ts**: Web scraper for infolombait.com
+- **src/workflow/2.upload-to-r2.ts**: Downloads and uploads images to R2 storage
+- **src/workflow/3.insertdb.ts**: Inserts posts to PostgreSQL database
 - **src/workflow/lib/\*.ts**: Shared utilities, types, config, and AI model functions
 - **src/utils/\*.ts**: Logger utilities
 
 ### Workflow Pipeline
 
-The system uses **Cloudflare Workers Workflow** for scraping and **Inngest** for AI processing:
+The system uses **Cloudflare Workers Workflow** for parallel scraping and **Inngest** for AI processing:
 
 #### Phase 1: Cloudflare Workers Workflow (Cron Triggered)
 
-1. **Instagram Scraping** (`CompetitionAutomationWorkflow.step1_scrapeInstagram`)
-   - Scrapes multiple competition accounts using `@aduptive/instagram-scraper`
-   - Returns posts with title, link, image, description, source
+1. **Parallel Scraping** (`CompetitionAutomationWorkflow.step1_scrapeAllSources`)
+   - Runs **all scrapers simultaneously** using `Promise.allSettled()` for error isolation
+   - **Instagram scraper** (`1.ig-scrape.ts`):
+     - Scrapes 6 competition accounts using `@aduptive/instagram-scraper`
+     - Each account gets 4 latest posts
+     - Source tracking: `source: "instagram"`, `username: "@account"`
+   - **Web scrapers** (`1.web-scrape-*.ts`):
+     - infolomba.id: 20 posts with descriptions
+     - infolombait.com: 5 posts with normalized images
+     - Source tracking: `source: "web"`, `username: "infolombaid/infolombait"`
+   - Returns unified `ScrapeResult` with all posts from all sources
+   - If one scraper fails, others continue (error isolation)
 
 2. **Upload to R2** (`CompetitionAutomationWorkflow.step2_uploadToR2`)
-   - Downloads images and uploads to Cloudflare R2 storage
+   - Downloads images from ALL sources (IG + web)
+   - Uploads to Cloudflare R2 storage
    - Uses S3 SDK with R2 credentials
    - Replaces original URLs with R2 URLs
 
@@ -98,11 +113,17 @@ The system uses **Cloudflare Workers Workflow** for scraping and **Inngest** for
 ```
 Cloudflare Cron (daily)
         ↓
-Instagram Scraping
+┌─────────────────────────────────────┐
+│  Parallel Scraping (simultaneous)   │
+│  ┌──────────┐  ┌──────────┐        │
+│  │ IG (6)   │  │ Web (2)  │        │
+│  │ accounts │  │ sources  │        │
+│  └──────────┘  └──────────┘        │
+└─────────────────────────────────────┘
         ↓
-Upload to R2 (replace URLs)
+Upload to R2 (all images from all sources)
         ↓
-Insert to DB (status='draft')
+Insert to DB (status='draft', source tracked)
         ↓
 Trigger Inngest with newRecordIds
         ↓
@@ -113,22 +134,46 @@ Send to WhatsApp
 whatsappChannel=true
 ```
 
+### Source Tracking
+
+Each post in the database includes:
+- `urlsource`: Original URL (IG post or web page)
+- `source`: `"instagram"` or `"web"`
+- Username/account identifier for tracking origin
+
 ### Manual Trigger
 
 Endpoint: `POST /api/trigger-scraping`
 - Requires `code` query parameter for security
-- Manually triggers the IG scraping pipeline
+- Manually triggers the **parallel scraping pipeline** (IG + web)
 - Useful for testing or on-demand updates
 
 ### Configuration
 
 Centralized in `src/workflow/lib/config.ts`:
-- Instagram accounts to scrape (8 accounts)
-- R2 bucket settings
-- WhatsApp API configuration
-- Database connection settings
 
-Uses environment variables for credentials. Validate with `validateConfig()`.
+```typescript
+AppConfig {
+  instagram: InstagramConfig;     // IG accounts, limits, timeouts
+  webScraping: WebScrapingConfig; // Web sources, enabled flag
+  r2: R2Config;                   // R2 bucket, credentials
+  whatsapp: WhatsAppConfig;       // WAHA API, channels
+  db: DbConfig;                   // Database connection
+}
+```
+
+**Instagram accounts** (6 active):
+- `infolomba.indonesia.id`
+- `lomba_mahasiswa`
+- `infolombaeventid`
+- `infolombamahasiswa.id`
+- `pusatinfolomba`
+
+**Web sources** (2 active):
+- infolomba.id (20 posts)
+- infolombait.com (5 posts)
+
+Web scraping can be disabled via `config.webScraping.enabled = false`.
 
 ### AI Models
 
@@ -153,13 +198,21 @@ Enhanced logger in `src/utils/enhanced-logger.ts`:
 - Structured logging with child loggers
 - Timing operations with `.time()` and `.endTimer()`
 - Categorized errors via `ErrorCategory`
+- Prefix-based logging: `[ig]`, `[web]`, `[r2]`, `[db]`, `[ai]`, `[wa]`
 - Used throughout workflow steps for debugging
 
-### Web Scraping (Backup)
+### Scraping Architecture
 
-A web scraper exists at `src/workflow/1.web-scrape.ts` but is **not part of the main automated flow**:
-- Scrapes infolombait.com using Cheerio
-- Can be used independently as a backup data source
+**Parallel Scraper** (`1.parallel-scrape.ts`):
+- Uses `Promise.allSettled()` for error isolation
+- Each scraper wrapped in try-catch
+- Returns unified `ScrapeResult` with all posts and any errors
+- Source tracking: `source: "instagram" | "web"` + `username`
+
+**Individual Scrapers**:
+- All return `ScrapeResult` interface: `{ count, posts: ScrapedPost[], errors? }`
+- `ScrapedPost`: `{ title, link, image, description, source, username }`
+- Error handling per-scraper (one failure doesn't stop others)
 
 ### TypeScript Configuration
 
